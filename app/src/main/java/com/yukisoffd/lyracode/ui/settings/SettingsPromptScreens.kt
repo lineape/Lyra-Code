@@ -52,11 +52,11 @@ import kotlin.math.max
 
 
 @Composable
-internal fun PromptSettingsScreen(settings: AppSettings) {
+internal fun PromptSettingsScreen(settings: AppSettings, externalRevision: Int = 0) {
     fun visiblePresets() = settings.systemPromptPresets()
-    var pureMode by remember { mutableStateOf(settings.purePromptMode) }
-    var presets by remember { mutableStateOf(visiblePresets()) }
-    var selectedId by remember { mutableStateOf(settings.selectedSystemPromptId) }
+    var pureMode by remember(externalRevision) { mutableStateOf(settings.purePromptMode) }
+    var presets by remember(externalRevision) { mutableStateOf(visiblePresets()) }
+    var selectedId by remember(externalRevision) { mutableStateOf(settings.selectedSystemPromptId) }
     var editing by remember { mutableStateOf<SystemPromptPreset?>(null) }
     var notice by remember { mutableStateOf("") }
 

@@ -679,7 +679,7 @@ internal fun appPermissionRows(context: Context, termuxExecutor: TermuxExecutor)
     }
 }
 
-private tailrec fun Context.findMainActivity(): MainActivity? = when (this) {
+internal tailrec fun Context.findMainActivity(): MainActivity? = when (this) {
     is MainActivity -> this
     is ContextWrapper -> baseContext.findMainActivity()
     else -> null

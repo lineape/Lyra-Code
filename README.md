@@ -80,6 +80,10 @@ Then grant the Termux `RUN_COMMAND` permission from Lyra Code settings. Without 
 - Linux rootfs instances are mutable app data. Clearing app data or uninstalling Lyra Code removes them, and they are excluded from Android cloud backup/device transfer.
 - See [App-internal PRoot Linux environments](docs/DEBIAN_RUNTIME.md) for supported archives, lifecycle, storage, limitations, and source information.
 
+## Web access
+
+Start **Settings → Web access** on your phone, then open its address in a desktop browser and enter the access code. Chat, upload desktop files, browse session history, and adjust agent settings in sync with the phone. The foreground Activity keeps the screen awake while the service runs. See [Web access](docs/WEB_ACCESS.md) for LAN/public access, directory permissions, and verification.
+
 ## Build
 
 Requirements: JDK 17, Android SDK 37, and Android Studio or a command-line Android SDK. The minimum supported version is Android 8.0 (API 26).

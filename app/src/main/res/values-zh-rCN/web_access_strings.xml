@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_access_title">网页访问</string>
+    <string name="web_access_desc">在电脑浏览器中对话、上传文件和调整 Agent 设置，并与手机实时同步。</string>
+    <string name="web_access_lan">监听局域网 / 所有网络接口</string>
+    <string name="web_access_port">端口（1024–65535）</string>
+    <string name="web_access_start">启动网页访问</string>
+    <string name="web_access_stop">停止网页访问</string>
+    <string name="web_access_addresses">访问地址</string>
+    <string name="web_access_token">访问码</string>
+    <string name="web_access_copy">复制</string>
+    <string name="web_access_reset_token">重置访问码</string>
+    <string name="web_access_hint">保持 Lyra Code 位于前台可使屏幕常亮；关闭 Activity 会停止网页访问。共享存储目录需先在手机端授权。公网访问请配置端口转发或 HTTPS 反向代理，并妥善保管访问码。</string>
+    <string name="web_access_notification">网页访问运行中，点击返回应用。</string>
+    <string name="web_access_storage_permission">管理所有文件权限</string>
+    <string name="web_access_storage_desc">网页目录浏览器直接读取共享存储。请在手机授予管理所有文件权限，即可在网页中浏览、选择目录，无需 SAF 目录选择器。</string>
+</resources>

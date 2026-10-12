@@ -47,6 +47,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.LyraCode"
         tools:targetApi="31">
+        <service android:name=".webaccess.WebAccessForegroundService" android:exported="false"
+            android:foregroundServiceType="specialUse" android:stopWithTask="true">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-started authenticated web companion for live conversations and file uploads; stopped by the user" />
+        </service>
         <service
             android:name=".interaction.overlay.ManualControlForegroundService"
             android:exported="false"

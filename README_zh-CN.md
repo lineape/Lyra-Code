@@ -50,6 +50,8 @@ Lyra Code 将 Android 设备变成 AI 辅助的全栈开发环境。它的核心
 
 ## 配套工具
 
+- **网页访问：** 在设置中启动手机端网页服务，在电脑浏览器中同步使用对话、会话历史、Agent 设置和文件上传；手机前台屏幕常亮。详见[网页访问说明](docs/WEB_ACCESS.md)。
+
 - 工作区文件搜索与编辑、变更审查、Diff 可视化、TODO/过程记录、原生下载、后台任务和定时任务。
 - 集成 Sora Editor，支持 TextMate 高亮、行号、搜索跳转、换行、`.bak` 备份和 AI 编辑侧栏；另有双栏 Android 文件管理器。
 - MCP 客户端/服务端、SSH、SMTP/IMAP、WebDAV、FTP/FTPS/SFTP、原生 HTTP/HTTPS 下载及自然语言配置管理。

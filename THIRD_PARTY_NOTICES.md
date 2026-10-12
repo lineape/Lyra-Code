@@ -31,6 +31,8 @@ This document summarizes the main third-party components used by Lyra Code. It i
 
 ## Test-Only Dependencies
 
+The web companion additionally packages the repository's existing Marked (MIT) and DOMPurify (Apache-2.0 or MPL-2.0) distributions for offline Markdown rendering and sanitization. Their original notices are retained in `app/src/main/assets/web-access/marked-LICENSE.txt` and `dompurify-LICENSE.txt`.
+
 | Component | License | Notes |
 | --- | --- | --- |
 | JUnit | Eclipse Public License 1.0 | Test dependency. |

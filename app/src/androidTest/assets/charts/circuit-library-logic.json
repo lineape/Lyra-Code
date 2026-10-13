@@ -1,0 +1,323 @@
+{
+  "width": 1540,
+  "height": 1520,
+  "components": [
+    {
+      "id": "X1",
+      "type": "ic",
+      "x": 130,
+      "y": 160,
+      "label": "ic",
+      "mark": "模块",
+      "pins": [
+        {
+          "id": "IN",
+          "side": "left",
+          "offset": -24,
+          "label": "IN",
+          "clock": true
+        },
+        {
+          "id": "RST",
+          "side": "left",
+          "offset": 24,
+          "label": "RST",
+          "invert": true,
+          "overline": true
+        },
+        {
+          "id": "OUT",
+          "side": "right",
+          "label": "OUT"
+        }
+      ]
+    },
+    {
+      "id": "X2",
+      "type": "block",
+      "x": 380,
+      "y": 160,
+      "label": "block",
+      "mark": "模块",
+      "pins": [
+        {
+          "id": "IN",
+          "side": "left",
+          "offset": -24,
+          "label": "IN",
+          "clock": true
+        },
+        {
+          "id": "RST",
+          "side": "left",
+          "offset": 24,
+          "label": "RST",
+          "invert": true,
+          "overline": true
+        },
+        {
+          "id": "OUT",
+          "side": "right",
+          "label": "OUT"
+        }
+      ]
+    },
+    {
+      "id": "X3",
+      "type": "connector",
+      "x": 630,
+      "y": 160,
+      "label": "connector",
+      "mark": "模块",
+      "pins": [
+        {
+          "id": "IN",
+          "side": "left",
+          "offset": -24,
+          "label": "IN",
+          "clock": true
+        },
+        {
+          "id": "RST",
+          "side": "left",
+          "offset": 24,
+          "label": "RST",
+          "invert": true,
+          "overline": true
+        },
+        {
+          "id": "OUT",
+          "side": "right",
+          "label": "OUT"
+        }
+      ],
+      "width": 160
+    },
+    {
+      "id": "X4",
+      "type": "converter",
+      "x": 880,
+      "y": 160,
+      "label": "converter",
+      "mark": "~ / =",
+      "pins": [
+        {
+          "id": "IN",
+          "side": "left",
+          "offset": -24,
+          "label": "IN",
+          "clock": true
+        },
+        {
+          "id": "RST",
+          "side": "left",
+          "offset": 24,
+          "label": "RST",
+          "invert": true,
+          "overline": true
+        },
+        {
+          "id": "OUT",
+          "side": "right",
+          "label": "OUT"
+        }
+      ]
+    },
+    {
+      "id": "X5",
+      "type": "voltage_regulator",
+      "x": 1130,
+      "y": 160,
+      "label": "voltage_regulator"
+    },
+    {
+      "id": "X6",
+      "type": "and_gate",
+      "x": 1380,
+      "y": 160,
+      "label": "and_gate"
+    },
+    {
+      "id": "X7",
+      "type": "nand_gate",
+      "x": 130,
+      "y": 380,
+      "label": "nand_gate"
+    },
+    {
+      "id": "X8",
+      "type": "or_gate",
+      "x": 380,
+      "y": 380,
+      "label": "or_gate"
+    },
+    {
+      "id": "X9",
+      "type": "nor_gate",
+      "x": 630,
+      "y": 380,
+      "label": "nor_gate"
+    },
+    {
+      "id": "X10",
+      "type": "xor_gate",
+      "x": 880,
+      "y": 380,
+      "label": "xor_gate"
+    },
+    {
+      "id": "X11",
+      "type": "xnor_gate",
+      "x": 1130,
+      "y": 380,
+      "label": "xnor_gate"
+    },
+    {
+      "id": "X12",
+      "type": "buffer",
+      "x": 1380,
+      "y": 380,
+      "label": "buffer"
+    },
+    {
+      "id": "X13",
+      "type": "not_gate",
+      "x": 130,
+      "y": 600,
+      "label": "not_gate"
+    },
+    {
+      "id": "X14",
+      "type": "schmitt_trigger",
+      "x": 380,
+      "y": 600,
+      "label": "schmitt_trigger"
+    },
+    {
+      "id": "X15",
+      "type": "tri_state_buffer",
+      "x": 630,
+      "y": 600,
+      "label": "tri_state_buffer"
+    },
+    {
+      "id": "X16",
+      "type": "d_flipflop",
+      "x": 880,
+      "y": 600,
+      "label": "d_flipflop"
+    },
+    {
+      "id": "X17",
+      "type": "jk_flipflop",
+      "x": 1130,
+      "y": 600,
+      "label": "jk_flipflop"
+    },
+    {
+      "id": "X18",
+      "type": "sr_latch",
+      "x": 1380,
+      "y": 600,
+      "label": "sr_latch"
+    },
+    {
+      "id": "X19",
+      "type": "multiplexer",
+      "x": 130,
+      "y": 820,
+      "label": "multiplexer"
+    },
+    {
+      "id": "X20",
+      "type": "demultiplexer",
+      "x": 380,
+      "y": 820,
+      "label": "demultiplexer"
+    },
+    {
+      "id": "X21",
+      "type": "counter",
+      "x": 630,
+      "y": 820,
+      "label": "counter"
+    },
+    {
+      "id": "X22",
+      "type": "shift_register",
+      "x": 880,
+      "y": 820,
+      "label": "shift_register"
+    },
+    {
+      "id": "X23",
+      "type": "rectifier",
+      "x": 1130,
+      "y": 820,
+      "label": "rectifier"
+    },
+    {
+      "id": "X24",
+      "type": "inverter",
+      "x": 1380,
+      "y": 820,
+      "label": "inverter"
+    },
+    {
+      "id": "X25",
+      "type": "dc_dc_converter",
+      "x": 130,
+      "y": 1040,
+      "label": "dc_dc_converter"
+    },
+    {
+      "id": "X26",
+      "type": "ac_ac_converter",
+      "x": 380,
+      "y": 1040,
+      "label": "ac_ac_converter"
+    },
+    {
+      "id": "X27",
+      "type": "frequency_converter",
+      "x": 630,
+      "y": 1040,
+      "label": "frequency_converter"
+    },
+    {
+      "id": "X28",
+      "type": "voltage_frequency_converter",
+      "x": 880,
+      "y": 1040,
+      "label": "voltage_frequency_converter"
+    },
+    {
+      "id": "X29",
+      "type": "frequency_voltage_converter",
+      "x": 1130,
+      "y": 1040,
+      "label": "frequency_voltage_converter"
+    },
+    {
+      "id": "X30",
+      "type": "adc",
+      "x": 1380,
+      "y": 1040,
+      "label": "adc"
+    },
+    {
+      "id": "X31",
+      "type": "dac",
+      "x": 130,
+      "y": 1260,
+      "label": "dac"
+    },
+    {
+      "id": "X32",
+      "type": "bridge_rectifier",
+      "x": 380,
+      "y": 1260,
+      "label": "bridge_rectifier"
+    }
+  ]
+}

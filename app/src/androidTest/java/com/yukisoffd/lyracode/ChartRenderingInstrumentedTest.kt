@@ -57,6 +57,9 @@ class ChartRenderingInstrumentedTest {
             "echarts" to "{\"series\":[{\"type\":\"graph\",\"layout\":\"force\",\"label\":{\"show\":true},\"data\":[{\"name\":\"用户\"},{\"name\":\"订单\"}],\"links\":[{\"source\":0,\"target\":1}]}]}",
             "mermaid" to "flowchart LR\n" + (0..12).joinToString(" --> ") { "N$it[开始步骤$it]" },
             "mermaid" to "flowchart TB\n" + (0..12).joinToString(" --> ") { "N$it[开始步骤$it]" },
+            "circuit" to instrumentation.context.assets.open("charts/ne555-cd4017.json").bufferedReader().use { it.readText() },
+            "circuit" to instrumentation.context.assets.open("charts/circuit-library-power.json").bufferedReader().use { it.readText() },
+            "circuit" to instrumentation.context.assets.open("charts/circuit-library-logic.json").bufferedReader().use { it.readText() },
         )
         try {
             for (dark in listOf(false, true)) for ((index, sample) in samples.withIndex()) {
@@ -128,7 +131,7 @@ class ChartRenderingInstrumentedTest {
                     assertTrue("Missing SVG", svg.contains("<svg"))
                     assertFalse(svg.contains("<foreignObject"))
                     assertFalse(svg.contains("<script"))
-                    val expectedLabel = listOf("开始", "用户", "项目计划", "项目", "应用", "USER", "App", "一月", "客户").first { source.contains(it) }
+                    val expectedLabel = listOf("开始", "用户", "项目计划", "项目", "应用", "USER", "App", "一月", "客户", "NE555", "variable_resistor", "and_gate").first { source.contains(it) }
                     assertTrue("Export lost labels: $expectedLabel", svg.contains(expectedLabel))
                 } finally { instrumentation.runOnMainSync { (view!!.parent as? ViewGroup)?.removeView(view); releaseChartWebView(view!!) } }
             }

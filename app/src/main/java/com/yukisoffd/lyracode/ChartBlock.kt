@@ -311,7 +311,7 @@ internal fun createChartWebView(
                 return WebResourceResponse("text/html", "UTF-8", 200, "OK", mapOf("Cache-Control" to "no-store"), ByteArrayInputStream(pageBytes))
             }
             val name = request.url.toString().removePrefix(CHART_ASSET_ORIGIN)
-            if (request.url.toString() == CHART_ASSET_ORIGIN + name && name in setOf("mermaid.min.js", "echarts.min.js", "renderer.js")) {
+            if (request.url.toString() == CHART_ASSET_ORIGIN + name && name in setOf("mermaid.min.js", "echarts.min.js", "circuit-symbols.js", "circuit.js", "renderer.js")) {
                 return WebResourceResponse("application/javascript", "UTF-8", context.assets.open("charts/$name"))
             }
             return WebResourceResponse("text/plain", "UTF-8", 403, "Blocked", emptyMap(), ByteArrayInputStream(ByteArray(0)))

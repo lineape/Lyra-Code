@@ -71,7 +71,7 @@ function createRichContent() {
     }
     if(!streaming)for(const code of descendants(root,'pre>code')) {
       const language=[...code.classList].find(c=>c.startsWith('language-'))?.slice(9);
-      if(['mermaid','echarts','chart'].includes(language) && !code.parentElement.dataset.chartRendered) {
+      if(['mermaid','echarts','circuit','chart'].includes(language) && !code.parentElement.dataset.chartRendered) {
         code.parentElement.dataset.chartRendered='true';renderChart(code,language,onResize);
       }
     }
@@ -85,13 +85,15 @@ function createRichContent() {
     }
   }
   async function renderChart(code,language,onResize) {
-    const pre=code.parentElement,source=code.textContent;if(source.length>100_000)return;
+    // Chart envelopes JSON-escape their source; keep the actual source limit
+    // at 100k while allowing a valid escaped envelope to be larger.
+    const pre=code.parentElement,source=code.textContent;if(source.length>(language==='chart'?220_000:100_000))return;
     const host=document.createElement('div');host.className='rich-chart-host';pre.classList.add('rich-chart');code.hidden=true;pre.append(host);
     const controls=document.createElement('div');controls.className='chart-actions';
     controls.innerHTML=`<button class="quiet" data-visual>${esc(t('放大预览'))}</button><button class="quiet" data-chart-source>${esc(t('查看源码'))}</button><button class="quiet" data-chart-save>${esc(t('保存图表'))}</button>`;pre.append(controls);
     try {
       const document=language==='chart'?JSON.parse(source):{engine:language,source};
-      if(!['mermaid','echarts'].includes(document.engine) || typeof document.source!=='string')throw new Error('Unsupported chart');
+      if(!['mermaid','echarts','circuit'].includes(document.engine) || typeof document.source!=='string' || document.source.length>100_000)throw new Error('Unsupported chart');
       if(document.title){const title=window.document.createElement('strong');title.textContent=document.title;pre.prepend(title);}
       if(document.engine==='mermaid') {
         if(/%%\s*\{|^\s*---/.test(document.source))throw new Error('Chart configuration directives are not supported');
@@ -104,6 +106,9 @@ function createRichContent() {
           host.querySelectorAll('[href],[xlink\\:href]').forEach(node=>{for(const attr of ['href','xlink:href'])if(node.hasAttribute(attr) && !node.getAttribute(attr).startsWith('#'))node.removeAttribute(attr);});
           onResize();
         });await mermaidQueue;
+      } else if(document.engine==='circuit') {
+        const svg=LyraCircuit.render(JSON.parse(document.source),{dark:window.document.documentElement.dataset.scheme==='dark',title:document.title});
+        host.replaceChildren(svg);LyraCircuit.fit(svg);onResize();
       } else {
         const option=JSON.parse(document.source);validateData(option);delete option.toolbox;
         const series=Array.isArray(option.series)?option.series:[option.series];if(!series.length || series.length>100 || series.some(s=>!s || typeof s.type!=='string'))throw new Error('Invalid ECharts series');

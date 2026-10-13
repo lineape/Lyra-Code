@@ -21,7 +21,7 @@ internal data class ChartDocument(val engine: String, val source: String, val ti
     companion object {
         fun create(engine: String, source: String, title: String = ""): ChartDocument {
             val normalizedEngine = engine.trim().lowercase(Locale.ROOT)
-            require(normalizedEngine in setOf("mermaid", "echarts")) { "engine must be mermaid or echarts." }
+            require(normalizedEngine in setOf("mermaid", "echarts", "circuit")) { "engine must be mermaid, echarts or circuit." }
             require(source.length <= MAX_CHART_SOURCE_LENGTH) { "Chart source exceeds $MAX_CHART_SOURCE_LENGTH characters." }
             val text = source.trim().removePrefix("\uFEFF")
             require(text.isNotBlank()) { "Chart source must not be empty." }
@@ -36,6 +36,10 @@ internal data class ChartDocument(val engine: String, val source: String, val ti
             }
             val option = JSONObject(text)
             validateChartJson(option)
+            if (normalizedEngine == "circuit") {
+                validateCircuitDocument(option)
+                return ChartDocument(normalizedEngine, option.toString(), title.trim())
+            }
             val series = option.opt("series")
             val entries = when (series) {
                 is JSONObject -> listOf(series)
@@ -50,14 +54,14 @@ internal data class ChartDocument(val engine: String, val source: String, val ti
         }
 
         fun fromFence(language: String, code: String): ChartDocument = when (language.lowercase(Locale.ROOT)) {
-            "mermaid", "echarts" -> create(language, code)
+            "mermaid", "echarts", "circuit" -> create(language, code)
             "chart" -> JSONObject(code).let { create(it.getString("engine"), it.getString("source"), it.optString("title")) }
             else -> error("Unsupported chart fence: $language")
         }
     }
 }
 
-internal fun isChartLanguage(language: String): Boolean = language.lowercase(Locale.ROOT) in setOf("chart", "mermaid", "echarts")
+internal fun isChartLanguage(language: String): Boolean = language.lowercase(Locale.ROOT) in setOf("chart", "mermaid", "echarts", "circuit")
 
 private val MERMAID_HEADER = Regex(
     "^(flowchart|graph|sequenceDiagram|gantt|pie|mindmap|architecture-beta|erDiagram|classDiagram|stateDiagram(?:-v2)?|journey|gitGraph|timeline|quadrantChart|xychart-beta|sankey-beta|block-beta|requirementDiagram|packet-beta)(?:\\s|$)",
@@ -91,7 +95,8 @@ internal fun chartHtml(document: ChartDocument, dark: Boolean, fullscreen: Boole
     <style>html,body{margin:0;background:${if (dark) "#1c1b1f" else "#ffffff"};color:${if (dark) "#ece6f0" else "#1c1b1f"};font-family:system-ui,sans-serif}#chart-viewport{position:relative;width:100%}#chart{box-sizing:border-box;padding:12px}#chart>svg{display:block;margin:auto}#chart a{pointer-events:none}</style>
     </head><body><div id="chart-viewport"><div id="chart"></div></div>
     <script id="chart-data" type="application/json">${chartPayloadJson(document, dark, fullscreen)}</script>
-    <script src="${document.engine}.min.js"></script><script src="renderer.js"></script>
+    ${if (document.engine == "circuit") "<script src=\"circuit-symbols.js\"></script>" else ""}
+    <script src="${if (document.engine == "circuit") "circuit.js" else "${document.engine}.min.js"}"></script><script src="renderer.js"></script>
     </body></html>
 """.trimIndent()
 

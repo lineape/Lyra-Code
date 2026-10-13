@@ -44,7 +44,8 @@ internal class WebAccessManager(private val activity: Activity, private val sett
         "/marked.js" to "marked.js", "/purify.js" to "purify.js", "/i18n.js" to "i18n.js", "/reasoning.js" to "reasoning.js",
         "/rich-content.js" to "rich-content.js", "/stream.js" to "stream.js",
         "/katex/katex.min.js" to "katex/katex.min.js", "/katex/katex.min.css" to "katex/katex.min.css",
-        "/charts/mermaid.min.js" to "charts/mermaid.min.js", "/charts/echarts.min.js" to "charts/echarts.min.js") +
+        "/charts/mermaid.min.js" to "charts/mermaid.min.js", "/charts/echarts.min.js" to "charts/echarts.min.js",
+        "/charts/circuit.js" to "charts/circuit.js", "/charts/circuit-symbols.js" to "charts/circuit-symbols.js") +
         activity.assets.list("katex/fonts").orEmpty().associate { "/katex/fonts/$it" to "katex/fonts/$it" }
     private val cachedAssets by lazy {
         assets.mapValues { (_, name) -> activity.assets.open(if (name.startsWith("katex/") || name.startsWith("charts/")) name else "web-access/$name").use { it.readBytes() } }

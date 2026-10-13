@@ -2264,7 +2264,7 @@ Revocation stops new access through that permission but does not automatically e
     <string name="log_char_count">%1$d characters</string>
     <string name="log_effort_absent">No reasoning effort field was sent in this request.</string>
     <string name="tool_create_chart">Create chart</string>
-    <string name="tool_create_chart_desc">Create inline diagrams and data charts with fullscreen viewing and file export.</string>
+    <string name="tool_create_chart_desc">Create inline diagrams, circuit schematics and data charts with fullscreen viewing and file export.</string>
     <string name="chart_title">Chart</string>
     <string name="chart_source">Show source</string>
     <string name="chart_save">Save chart as</string>
@@ -2316,4 +2316,6 @@ Revocation stops new access through that permission but does not automatically e
     <string name="mcp_protocol_auto">Auto detect (legacy and modern)</string>
     <string name="mcp_protocol_stateless">2026-07-28 (stateless)</string>
     <string name="mcp_local_protocol_hint">The local server supports both versions. Select the external client protocol to generate its connection configuration.</string>
+    <string name="tool_get_circuit_symbols">Circuit symbol library</string>
+    <string name="tool_get_circuit_symbols_desc">Find circuit symbols and their pin names and coordinates.</string>
 </resources>

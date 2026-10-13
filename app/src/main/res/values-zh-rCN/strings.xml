@@ -2347,7 +2347,7 @@ Shizuku 与 Root：不属于普通运行时权限，由用户在“系统权限�
     <string name="log_char_count">%1$d 字符</string>
     <string name="log_effort_absent">此请求未发送推理强度字段。</string>
     <string name="tool_create_chart">创建图表</string>
-    <string name="tool_create_chart_desc">创建正文内的流程图、时序图、甘特图、思维导图和数据图表，支持全屏浏览和另存。</string>
+    <string name="tool_create_chart_desc">创建正文内的流程图、时序图、甘特图、思维导图、电路图和数据图表，支持全屏浏览和另存。</string>
     <string name="chart_title">图表</string>
     <string name="chart_source">查看源码</string>
     <string name="chart_save">图表另存为</string>
@@ -2399,6 +2399,8 @@ Shizuku 与 Root：不属于普通运行时权限，由用户在“系统权限�
     <string name="mcp_protocol_auto">自动探测（兼容新旧版本）</string>
     <string name="mcp_protocol_stateless">2026-07-28（无状态）</string>
     <string name="mcp_local_protocol_hint">本机服务同时支持新旧版本。选择外部客户端使用的协议版本以生成连接配置。</string>
+    <string name="tool_get_circuit_symbols">电路符号库</string>
+    <string name="tool_get_circuit_symbols_desc">查询电路元件符号、引脚名称和坐标。</string>
 </resources>
 
 

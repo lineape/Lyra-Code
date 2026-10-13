@@ -7,9 +7,9 @@ plugins {
 
 val bundledProotRuntimeDir = layout.projectDirectory.dir("src/debianRuntime/jniLibs")
 val bundledProotRuntimeHashes = mapOf(
-    "arm64-v8a/libproot_exec.so" to "3b641ecd1b04ba0d1d798cd602f3d4aa11010d052d2b9fb3e7f166390105a340",
-    "arm64-v8a/libproot_loader.so" to "39f8d98f345bd2f0cff53b6a9ee54418cec340f4738d6bdd2fb03112654a6183",
-    "x86_64/libproot_exec.so" to "3b4fd8359bddff1b569785f65ea3f370647f9dde8e11cb8091508944ad3179d1",
+    "arm64-v8a/libproot_exec.so" to "ce41048eb45feb85862e273be648b1820f3747a4226fdfe8217272bcf0933597",
+    "arm64-v8a/libproot_loader.so" to "825d0362db3319c2b3ed3b75fe300287c0f9eeb7f2427ceb05a4a004ad33ed12",
+    "x86_64/libproot_exec.so" to "508c63bb10cc4209daa33f58f8b41bcfd344cd43fd929339e927b12b1957f8af",
     "x86_64/libproot_loader.so" to "61b2dd1a858caddbab4647c519cfe0c23bbd2d47981358b9cc6ae818e79e6869",
 )
 
@@ -21,8 +21,8 @@ android {
         applicationId = "com.yukisoffd.lyracode"
         minSdk = 26
         targetSdk = 37
-        versionCode = 84
-        versionName = "4.0.7"
+        versionCode = 85
+        versionName = "4.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField(
@@ -140,6 +140,7 @@ dependencies {
     implementation(libs.jsch)
     implementation(project(":jlatexmath"))
     implementation(libs.jetbrains.markdown)
+    implementation(libs.android.svg)
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)
     implementation(libs.androidx.work.runtime.ktx)

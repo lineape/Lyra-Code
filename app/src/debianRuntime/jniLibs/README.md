@@ -1,8 +1,8 @@
 # Bundled PRoot runtime
 
 Every APK contains ARM64 and x86_64 executable/loader pairs built locally from
-Soffd/proot main commit `ad19f51716f6560075f1e6e40f1ebe82f2f239c6`.
-The source retains `7266fb3` (link-directory pinning) and includes these five
+Soffd/proot main commit `683e77029a47a26894347c5a3fbce74450aeb37e`.
+The source retains `7266fb3` (link-directory pinning) and includes these previous five
 upstream commits, cherry-picked in order with their original IDs recorded:
 
 - `8f467b0991d74f277eb841362abfbf8755942f97`: simulated hard-link executable paths.
@@ -11,17 +11,31 @@ upstream commits, cherry-picked in order with their original IDs recorded:
 - `8b9941505dcd7da9054942c4b742d9f687f8eb91`: child registration without event PIDs.
 - `d4d2a19081c3c07f75250e4ce2980b9fa2f5720f`: seccomp flags without event messages.
 
-Remote master was verified at `d4d2a19` on 2026-09-26. The local master branch
+The October update additionally includes all nine requested upstream commits:
+
+- `a179d3e`: preserve read-only reopens of regular files and memfds.
+- `37c09de`: leave a contiguous ARM64 address range for large mmap reservations.
+- `bd6d55e`: upstream contributor instructions.
+- `c1cd48d`: full-width getresuid/getresgid for secondary Android users.
+- `b5af02e`: readable namespace maps and cross-instance SO_PEERCRED.
+- `7fca80c`: fchmodat2 translation and symlink permissions.
+- `60a9c15`: AT_EMPTY_PATH resolves against the guest cwd.
+- `254202b`: open_tree translation and fd-mount ENOSYS fallback.
+- `b8c1f5c`: Unix datagram destinations, replies and restarted sends.
+
+Remote master was verified at `b8c1f5c` on 2026-10-13. The local master branch
 was not modified. `proot_src/` is the Git-free source copy of this main revision.
 
 ## Binary provenance
 
-- Version: `5.1.107.91-lyra.3`
+- Version: `5.1.107.100-lyra.4`
 - NDK: `29.0.14206865`, Clang 21; CMake 3.22.1, Ninja
 - Targets: `aarch64-linux-android24`, `x86_64-linux-android24`
 - Static dependency: vendored talloc 2.5.0
 - Flags: `-O2`, PIE executable, external static freestanding loader,
   `ARG_MAX=131072`, libandroid-shmem disabled, 16 KB-aligned ELF LOAD segments
+- ARM64 loader/PIE/interpreter addresses: `0x5400000000`, `0x5500000000`,
+  `0x5900000000`; x86_64 loader remains `0x600000000000`
 - Source/build instructions: `proot/android/CMakeLists.txt`, `proot/android/build.ps1`
 
 ## Rebuild
@@ -64,7 +78,7 @@ Keep the corresponding source and build material available to binary recipients
 under the selected GPLv3 terms; talloc is LGPL-3.0-or-later.
 
 ## SHA-256
-- `arm64-v8a/libproot_exec.so`: `3b641ecd1b04ba0d1d798cd602f3d4aa11010d052d2b9fb3e7f166390105a340`
-- `arm64-v8a/libproot_loader.so`: `39f8d98f345bd2f0cff53b6a9ee54418cec340f4738d6bdd2fb03112654a6183`
-- `x86_64/libproot_exec.so`: `3b4fd8359bddff1b569785f65ea3f370647f9dde8e11cb8091508944ad3179d1`
+- `arm64-v8a/libproot_exec.so`: `ce41048eb45feb85862e273be648b1820f3747a4226fdfe8217272bcf0933597`
+- `arm64-v8a/libproot_loader.so`: `825d0362db3319c2b3ed3b75fe300287c0f9eeb7f2427ceb05a4a004ad33ed12`
+- `x86_64/libproot_exec.so`: `508c63bb10cc4209daa33f58f8b41bcfd344cd43fd929339e927b12b1957f8af`
 - `x86_64/libproot_loader.so`: `61b2dd1a858caddbab4647c519cfe0c23bbd2d47981358b9cc6ae818e79e6869`

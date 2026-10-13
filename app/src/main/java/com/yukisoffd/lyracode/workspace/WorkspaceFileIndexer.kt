@@ -366,11 +366,15 @@ internal class WorkspaceFileIndexer(
     }
 
     private fun switchToSaf(state: WorkspaceIndexState) {
+        if (state.treeUri.scheme == "file") { switchToDocumentFile(state); return }
         state.complete = false
         state.source = IndexSource.SAF
         state.directDirectories.clear()
         state.deferredDirectDirectories.clear()
-        val rootDocumentId = runCatching { DocumentsContract.getTreeDocumentId(state.treeUri) }.getOrNull()
+        val rootDocumentId = runCatching {
+            if (DocumentsContract.isDocumentUri(context, state.treeUri)) DocumentsContract.getDocumentId(state.treeUri)
+            else DocumentsContract.getTreeDocumentId(state.treeUri)
+        }.getOrNull()
         if (rootDocumentId == null) {
             state.failures++
             switchToDocumentFile(state)

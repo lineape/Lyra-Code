@@ -133,8 +133,12 @@ internal fun OpenSourceLicensesScreen() {
                 LicenseTexts.EPL_2_0,
             ),
             LicenseNotice("JetBrains Markdown / RikkaHub Markdown fork", "Apache License 2.0", uiText(R.string.ui_markdown_gfm_ast_parsing_with_tables_lists_and_math), LicenseTexts.APACHE_2_0),
+            LicenseNotice("AndroidSVG 1.4", "Apache License 2.0", uiText(R.string.ui_native_svg_rendering),
+                "Copyright 2013 Paul LeBeau, Cave Rock Software Ltd.\n\n" + LicenseTexts.APACHE_2_0),
             LicenseNotice("Mermaid 11.17.2", "MIT", uiText(R.string.tool_create_chart_desc),
                 context.assets.open("charts/MERMAID-LICENSE").bufferedReader().use { it.readText() }),
+            LicenseNotice("Schemdraw 0.23 symbol geometry", "MIT", uiText(R.string.tool_get_circuit_symbols_desc),
+                context.assets.open("charts/SCHEMDRAW-LICENSE").bufferedReader().use { it.readText() }),
             LicenseNotice("Apache ECharts 6.1.0", "Apache License 2.0 / BSD", uiText(R.string.tool_create_chart_desc),
                 listOf("ECHARTS-LICENSE", "ECHARTS-NOTICE", "ECHARTS-D3-LICENSE").joinToString("\n\n") { name ->
                     context.assets.open("charts/$name").bufferedReader().use { it.readText() }
@@ -247,6 +251,7 @@ internal fun AboutSoftwareScreen(
     onOpenDeviceInfo: () -> Unit,
     onOpenServiceAgreements: () -> Unit,
     onOpenGitHubAcceleration: (String) -> Unit,
+    onOpenSponsorDevelopment: () -> Unit = {},
     updateInfoState: MutableState<AppUpdateInfo?> = remember { mutableStateOf(null) },
     showUpdateDialog: Boolean = true,
 ) {
@@ -570,6 +575,15 @@ internal fun AboutSoftwareScreen(
                     title = "Gitee",
                     value = "yukisoffd/lyra-code",
                     onClick = { uriHandler.openUri("https://gitee.com/yukisoffd/lyra-code") },
+                )
+            }
+            KimiSectionLabel(context.getString(R.string.sponsor_development_title))
+            KimiCardBox {
+                KimiMenuRow(
+                    Icons.Default.Favorite,
+                    context.getString(R.string.sponsor_development_title),
+                    context.getString(R.string.sponsor_development_desc),
+                    onClick = onOpenSponsorDevelopment,
                 )
             }
             KimiSectionLabel(context.getString(R.string.compliance_service_agreements))

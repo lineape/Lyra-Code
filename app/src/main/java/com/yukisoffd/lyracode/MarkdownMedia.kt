@@ -372,22 +372,26 @@ internal fun MarkdownMediaPreview(alt: String, url: String) {
 internal fun SourceImagePreview(source: String) {
     val context = LocalContext.current
     var bitmap by remember(source) { mutableStateOf<Bitmap?>(null) }
+    var animatedSvg by remember(source) { mutableStateOf<DecodedDataUrl?>(null) }
     var status by remember(source) { mutableStateOf(uiText(R.string.ui_loading_media)) }
     var previewOpen by remember(source) { mutableStateOf(false) }
     LaunchedEffect(source) {
         val loaded = withContext(Dispatchers.IO) {
             runCatching {
                 val bytes = readMediaBytes(context, source, 24 * 1024 * 1024)
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                loadPreviewImage(bytes, mimeTypeFromSource(source))
             }.getOrNull()
         }
-        bitmap = loaded
-        status = if (loaded == null) uiText(R.string.notice_image_load_failed) else ""
+        bitmap = loaded?.bitmap
+        animatedSvg = loaded?.animatedSvg
+        status = if (bitmap == null && animatedSvg == null) uiText(R.string.notice_image_load_failed) else ""
     }
-    if (bitmap != null) {
+    if (animatedSvg != null) {
+        AnimatedSvgInlinePreview(animatedSvg!!)
+    } else if (bitmap != null) {
         Image(
             bitmap = bitmap!!.asImageBitmap(),
-            contentDescription = null,
+            contentDescription = uiText(R.string.title_image_preview),
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 360.dp)
@@ -479,16 +483,21 @@ internal fun EmbeddedMediaPlayer(source: String, kind: String) {
 
 @Composable
 internal fun DataUrlInlinePreview(decoded: DecodedDataUrl) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var status by remember { mutableStateOf("") }
     var previewOpen by remember(decoded.bytes) { mutableStateOf(false) }
-    if (decoded.mimeType.startsWith("image/")) {
-        val bitmap = remember(decoded.bytes) { BitmapFactory.decodeByteArray(decoded.bytes, 0, decoded.bytes.size) }
+    val animated = remember(decoded.bytes, decoded.mimeType) { isAnimatedSvg(decoded.bytes, decoded.mimeType) }
+    if (animated) {
+        AnimatedSvgInlinePreview(decoded)
+    } else if (decoded.mimeType.startsWith("image/")) {
+        var bitmap by remember(decoded.bytes) { mutableStateOf<Bitmap?>(null) }
+        var loading by remember(decoded.bytes) { mutableStateOf(true) }
+        LaunchedEffect(decoded.bytes) {
+            bitmap = withContext(Dispatchers.Default) { decodePreviewImage(decoded.bytes, decoded.mimeType) }
+            loading = false
+        }
         if (bitmap != null) {
             Image(
-                bitmap = bitmap.asImageBitmap(),
-                contentDescription = null,
+                bitmap = bitmap!!.asImageBitmap(),
+                contentDescription = uiText(R.string.title_image_preview),
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 360.dp)
@@ -508,7 +517,11 @@ internal fun DataUrlInlinePreview(decoded: DecodedDataUrl) {
                 )
             }
         } else {
-            Text(uiText(R.string.notice_image_decode_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            Text(
+                uiText(if (loading) R.string.ui_loading_media else R.string.notice_image_decode_failed),
+                color = if (loading) KimiMuted else MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     } else {
         val kind = mediaKindForSource("", decoded.mimeType)
@@ -525,17 +538,6 @@ internal fun DataUrlInlinePreview(decoded: DecodedDataUrl) {
                 )
             }
         }
-    }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        KimiChip(uiText(R.string.action_save_file), onClick = {
-            status = uiText(R.string.ui_saving)
-            scope.launch {
-                status = withContext(Dispatchers.IO) { saveDecodedDataUrl(context, decoded) ?: uiText(R.string.notice_save_failed) }
-            }
-        })
-    }
-    if (status.isNotBlank()) {
-        Text(status, color = KimiMuted, style = MaterialTheme.typography.labelSmall)
     }
 }
 
@@ -602,22 +604,29 @@ internal fun FullscreenMediaPreviewDialog(
 internal fun FullscreenImageContent(source: String, bitmap: Bitmap?, decoded: DecodedDataUrl?) {
     val context = LocalContext.current
     var loadedBitmap by remember(source, bitmap, decoded?.bytes) {
-        mutableStateOf(bitmap ?: decoded?.bytes?.let { BitmapFactory.decodeByteArray(it, 0, it.size) })
+        mutableStateOf(bitmap)
+    }
+    var animatedSvg by remember(source, decoded?.bytes) {
+        mutableStateOf(decoded?.takeIf { isAnimatedSvg(it.bytes, it.mimeType) })
     }
     var status by remember(source) { mutableStateOf(if (loadedBitmap == null) uiText(R.string.ui_loading_media) else "") }
-    LaunchedEffect(source, loadedBitmap) {
-        if (loadedBitmap == null && source.isNotBlank()) {
+    LaunchedEffect(source, decoded?.bytes) {
+        if (loadedBitmap == null && animatedSvg == null && (source.isNotBlank() || decoded != null)) {
             val loaded = withContext(Dispatchers.IO) {
                 runCatching {
-                    val bytes = readMediaBytes(context, source, 48 * 1024 * 1024)
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    val bytes = decoded?.bytes ?: readMediaBytes(context, source, 48 * 1024 * 1024)
+                    loadPreviewImage(bytes, decoded?.mimeType ?: mimeTypeFromSource(source))
                 }.getOrNull()
             }
-            loadedBitmap = loaded
-            status = if (loaded == null) uiText(R.string.notice_image_load_error) else ""
+            loadedBitmap = loaded?.bitmap
+            animatedSvg = loaded?.animatedSvg
+            status = if (loadedBitmap == null && animatedSvg == null) uiText(R.string.notice_image_load_error) else ""
         }
     }
-    if (loadedBitmap != null) {
+    if (animatedSvg != null) {
+        AnimatedSvgPreview(animatedSvg!!.bytes, fullscreen = true,
+            modifier = Modifier.fillMaxSize().padding(top = 42.dp, bottom = 12.dp))
+    } else if (loadedBitmap != null) {
         Image(
             bitmap = loadedBitmap!!.asImageBitmap(),
             contentDescription = null,
@@ -852,6 +861,10 @@ internal fun KatexWebView(
 
 @Composable
 internal fun CodeBlock(block: MarkdownBlock.Code) {
+    if (block.language.equals("svg", true) && looksLikeSvg(block.code)) {
+        MarkdownMediaPreview("SVG", block.code)
+        return
+    }
     if (com.yukisoffd.lyracode.charts.isChartLanguage(block.language)) {
         ChartBlock(block.language, block.code)
         return
@@ -1892,10 +1905,16 @@ internal fun DataUrlPreviewDialog(dataUrl: String, onDismiss: () -> Unit, onCopy
                     Text(uiText(R.string.notice_cannot_parse_data_url), color = MaterialTheme.colorScheme.error)
                 } else {
                     Text(decoded.mimeType, color = KimiMuted, style = MaterialTheme.typography.labelMedium)
-                    if (decoded.mimeType.startsWith("image/")) {
-                        val bitmap = remember(decoded.bytes) { BitmapFactory.decodeByteArray(decoded.bytes, 0, decoded.bytes.size) }
+                    val animated = remember(decoded.bytes, decoded.mimeType) { isAnimatedSvg(decoded.bytes, decoded.mimeType) }
+                    if (animated) {
+                        AnimatedSvgInlinePreview(decoded)
+                    } else if (decoded.mimeType.startsWith("image/")) {
+                        var bitmap by remember(decoded.bytes) { mutableStateOf<Bitmap?>(null) }
+                        LaunchedEffect(decoded.bytes) {
+                            bitmap = withContext(Dispatchers.Default) { decodePreviewImage(decoded.bytes, decoded.mimeType) }
+                        }
                         if (bitmap != null) {
-                            Image(bitmap.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp), contentScale = ContentScale.Fit)
+                            Image(bitmap!!.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp), contentScale = ContentScale.Fit)
                         }
                     } else {
                         Text(uiText(R.string.ui_decoded) + "${decoded.bytes.size} bytes" + uiText(R.string.ui_audio_video_and_other_files_can_be_saved_and), color = KimiMuted)
@@ -1918,21 +1937,10 @@ internal fun DataUrlPreviewDialog(dataUrl: String, onDismiss: () -> Unit, onCopy
     )
 }
 
-internal data class DecodedDataUrl(
-    val mimeType: String,
-    val bytes: ByteArray,
-)
-
-internal fun decodeDataUrl(dataUrl: String): DecodedDataUrl? {
-    val match = Regex("""^data:([^;,]+)?;base64,(.+)$""", RegexOption.IGNORE_CASE).matchEntire(dataUrl.trim()) ?: return null
-    val mimeType = match.groupValues[1].ifBlank { "application/octet-stream" }
-    val bytes = runCatching { Base64.decode(match.groupValues[2], Base64.DEFAULT) }.getOrNull() ?: return null
-    return DecodedDataUrl(mimeType, bytes)
-}
-
 internal fun decodeMediaPayload(source: String): DecodedDataUrl? {
     val trimmed = source.trim()
     decodeDataUrl(trimmed)?.let { return it }
+    if (looksLikeSvg(trimmed)) return DecodedDataUrl(SVG_MIME_TYPE, trimmed.toByteArray(Charsets.UTF_8))
     if (!isLikelyRawBase64Media(trimmed)) return null
     val bytes = runCatching { Base64.decode(trimmed, Base64.DEFAULT) }.getOrNull() ?: return null
     val mimeType = detectMimeType(bytes) ?: return null
@@ -1953,6 +1961,7 @@ internal fun detectMimeType(bytes: ByteArray): String? = when {
     bytes.size >= 12 &&
         bytes.copyOfRange(0, 4).toString(Charsets.US_ASCII) == "RIFF" &&
         bytes.copyOfRange(8, 12).toString(Charsets.US_ASCII) == "WAVE" -> "audio/wav"
+    looksLikeSvg(bytes) -> SVG_MIME_TYPE
     else -> null
 }
 
@@ -2029,6 +2038,7 @@ internal fun mimeTypeFromSource(source: String): String? {
         lower.endsWith(".jpg") || lower.endsWith(".jpeg") -> "image/jpeg"
         lower.endsWith(".gif") -> "image/gif"
         lower.endsWith(".webp") -> "image/webp"
+        lower.endsWith(".svg") -> SVG_MIME_TYPE
         lower.endsWith(".mp4") || lower.endsWith(".m4v") -> "video/mp4"
         lower.endsWith(".webm") -> "video/webm"
         lower.endsWith(".mp3") -> "audio/mpeg"
@@ -2127,6 +2137,7 @@ internal fun mediaExtensionFromSource(source: String, mimeType: String?): String
     val lower = source.substringBefore('?').substringBefore('#').lowercase()
     MEDIA_EXTENSIONS.firstOrNull { lower.endsWith(it) }?.let { return it.removePrefix(".") }
     return when {
+        mimeType?.equals(SVG_MIME_TYPE, true) == true -> "svg"
         mimeType?.contains("png") == true -> "png"
         mimeType?.contains("jpeg") == true || mimeType?.contains("jpg") == true -> "jpg"
         mimeType?.contains("gif") == true -> "gif"
@@ -2137,7 +2148,7 @@ internal fun mediaExtensionFromSource(source: String, mimeType: String?): String
     }
 }
 
-internal val IMAGE_EXTENSIONS = listOf(".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
+internal val IMAGE_EXTENSIONS = listOf(".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg")
 internal val VIDEO_EXTENSIONS = listOf(".mp4", ".webm", ".mov", ".m4v", ".3gp")
 internal val AUDIO_EXTENSIONS = listOf(".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac")
 internal val MEDIA_EXTENSIONS = IMAGE_EXTENSIONS + VIDEO_EXTENSIONS + AUDIO_EXTENSIONS

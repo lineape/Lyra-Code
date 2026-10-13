@@ -18,6 +18,27 @@ data class UploadedFile(
 )
 
 class UploadedFileManager(private val context: Context) {
+    /** Browser uploads use the same persistent attachment payloads as phone uploads. */
+    fun saveWebUpload(displayName: String, mimeType: String, bytes: ByteArray): Result<UploadedFile> = runCatching {
+        val name = displayName.replace('\\', '/').substringAfterLast('/').filter { it >= ' ' && it != '\u007f' }.take(255)
+        require(name.isNotBlank()) { "File name is required" }
+        val safeMime = mimeType.substringBefore(';').trim().ifBlank { mimeTypeForName(name) ?: "application/octet-stream" }
+        val kind = mediaKindFor(safeMime)
+        require(bytes.size <= MAX_MEDIA_UPLOAD_BYTES) { "File exceeds 8 MB" }
+        // Keep binary files on disk; never decode arbitrary binary data into the model context.
+        val text = if (kind == "text" && bytes.size <= MAX_UPLOAD_BYTES && !bytes.contains(0.toByte())) {
+            runCatching { Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bytes)).toString() }.getOrNull()
+        } else null
+        val stored = persistMedia(name, bytes)
+        UploadedFile(name, text.orEmpty(), bytes.size, stored.absolutePath, safeMime, if (kind == "text" && text == null) "file" else kind)
+    }
+
+    fun discardWebUpload(file: UploadedFile) {
+        val directory = File(context.filesDir, CHAT_UPLOAD_DIRECTORY).canonicalFile
+        val stored = File(file.uri).canonicalFile
+        if (stored.parentFile == directory) stored.delete()
+    }
+
     fun readText(uri: Uri): Result<UploadedFile> = runCatching {
         val name = displayName(uri)
         val mimeType = context.contentResolver.getType(uri).orEmpty()

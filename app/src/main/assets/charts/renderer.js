@@ -147,6 +147,20 @@
   };
 
   async function render() {
+    if (payload.engine === 'circuit') {
+      var circuit = LyraCircuit.render(JSON.parse(payload.source), { dark: payload.dark, title: payload.title });
+      host.replaceChildren(circuit);
+      LyraCircuit.fit(circuit);
+      var circuitBox = circuit.viewBox.baseVal;
+      diagramSize = { width: circuitBox.width, height: circuitBox.height };
+      circuit.style.width = payload.fullscreen ? '100%' : circuitBox.width + 'px';
+      circuit.style.height = payload.fullscreen ? 'auto' : circuitBox.height + 'px';
+      circuit.style.minWidth = payload.fullscreen ? Math.min(circuitBox.width, 1400) + 'px' : '0';
+      if (!payload.fullscreen) circuit.style.maxWidth = 'none';
+      layoutChart();
+      window.addEventListener('resize', layoutChart);
+      return;
+    }
     if (payload.engine === 'mermaid') {
       mermaid.initialize({
         startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true,

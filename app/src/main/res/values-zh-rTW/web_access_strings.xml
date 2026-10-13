@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_access_title">網頁存取</string>
+    <string name="web_access_desc">在電腦瀏覽器中對話、上傳檔案和調整 Agent 設定，並與手機即時同步。</string>
+    <string name="web_access_lan">監聽區域網路 / 所有網路介面</string>
+    <string name="web_access_port">連接埠（1024–65535）</string>
+    <string name="web_access_start">啟動網頁存取</string>
+    <string name="web_access_stop">停止網頁存取</string>
+    <string name="web_access_addresses">存取位址</string>
+    <string name="web_access_token">存取碼</string>
+    <string name="web_access_copy">複製</string>
+    <string name="web_access_reset_token">重設存取碼</string>
+    <string name="web_access_hint">保持 Lyra Code 位於前景可使螢幕常亮；關閉 Activity 會停止網頁存取。共享儲存目錄需先在手機端授權。公網存取請設定連接埠轉送或 HTTPS 反向代理，並妥善保管存取碼。</string>
+    <string name="web_access_notification">網頁存取執行中，點擊返回應用程式。</string>
+    <string name="web_access_storage_permission">管理所有檔案權限</string>
+    <string name="web_access_storage_desc">網頁目錄瀏覽器直接讀取共用儲存。請在手機授予管理所有檔案權限，即可在網頁中瀏覽、選擇目錄，無需 SAF 目錄選擇器。</string>
+</resources>

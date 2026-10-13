@@ -220,6 +220,7 @@ import kotlin.math.abs
 import android.graphics.Canvas as AndroidCanvas
 
 class MainActivity : ComponentActivity() {
+    private var webAccessManager: com.yukisoffd.lyracode.webaccess.WebAccessManager? = null
     private var controller: ChatController? = null
     private var miniServerManager: MiniServerManager? = null
     private var localMcpServerManager: LocalMcpServerManager? = null
@@ -309,6 +310,10 @@ class MainActivity : ComponentActivity() {
         val chatController = ChatController(this, settings, conversationStore, uploadedFileManager, workspaceManager, agent)
         controller = chatController
 
+        val webAccessManager = com.yukisoffd.lyracode.webaccess.WebAccessManager(this, settings,
+            com.yukisoffd.lyracode.webaccess.WebAccessBridge(this, settings, chatController, workspaceManager, uploadedFileManager, mcpClientManager))
+        this.webAccessManager = webAccessManager
+
         setContent {
             var themeMode by remember { mutableStateOf(settings.themeMode) }
             var dynamicColorEnabled by remember { mutableStateOf(settings.dynamicColorEnabled) }
@@ -376,6 +381,8 @@ class MainActivity : ComponentActivity() {
                     settingsRevision = settingsRevision,
                     dynamicColorRevision = wallpaperColorRevision,
                 ) {
+                    val webColors = MaterialTheme.colorScheme
+                    androidx.compose.runtime.SideEffect { webAccessManager.updateTheme(darkMode, webColors) }
                     MainActivityWindow(this@MainActivity) {
                         LyraCodeApp(
                             settings = settings,
@@ -392,6 +399,7 @@ class MainActivity : ComponentActivity() {
                             backupManager = backupManager,
                             miniServerManager = miniServerManager,
                             localMcpServerManager = localMcpServerManager,
+                            webAccessManager = webAccessManager,
                             downloadTaskManager = downloadTaskManager,
                             scheduledTaskManager = scheduledTaskManager,
                             controller = chatController,
@@ -505,6 +513,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        webAccessManager?.stop()
         controller?.close()
         miniServerManager?.close()
         localMcpServerManager?.close()

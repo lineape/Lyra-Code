@@ -1,0 +1,664 @@
+{
+  "width": 1540,
+  "height": 3720,
+  "components": [
+    {
+      "id": "X1",
+      "type": "resistor",
+      "x": 130,
+      "y": 160,
+      "label": "resistor"
+    },
+    {
+      "id": "X2",
+      "type": "photoresistor",
+      "x": 380,
+      "y": 160,
+      "label": "photoresistor"
+    },
+    {
+      "id": "X3",
+      "type": "capacitor",
+      "x": 630,
+      "y": 160,
+      "label": "capacitor"
+    },
+    {
+      "id": "X4",
+      "type": "polarized_capacitor",
+      "x": 880,
+      "y": 160,
+      "label": "polarized_capacitor"
+    },
+    {
+      "id": "X5",
+      "type": "inductor",
+      "x": 1130,
+      "y": 160,
+      "label": "inductor"
+    },
+    {
+      "id": "X6",
+      "type": "diode",
+      "x": 1380,
+      "y": 160,
+      "label": "diode"
+    },
+    {
+      "id": "X7",
+      "type": "zener",
+      "x": 130,
+      "y": 380,
+      "label": "zener"
+    },
+    {
+      "id": "X8",
+      "type": "led",
+      "x": 380,
+      "y": 380,
+      "label": "led"
+    },
+    {
+      "id": "X9",
+      "type": "photodiode",
+      "x": 630,
+      "y": 380,
+      "label": "photodiode"
+    },
+    {
+      "id": "X10",
+      "type": "switch",
+      "x": 880,
+      "y": 380,
+      "label": "switch"
+    },
+    {
+      "id": "X11",
+      "type": "battery",
+      "x": 1130,
+      "y": 380,
+      "label": "battery"
+    },
+    {
+      "id": "X12",
+      "type": "voltage_source",
+      "x": 1380,
+      "y": 380,
+      "label": "voltage_source"
+    },
+    {
+      "id": "X13",
+      "type": "ac_source",
+      "x": 130,
+      "y": 600,
+      "label": "ac_source"
+    },
+    {
+      "id": "X14",
+      "type": "lamp",
+      "x": 380,
+      "y": 600,
+      "label": "lamp"
+    },
+    {
+      "id": "X15",
+      "type": "fuse",
+      "x": 630,
+      "y": 600,
+      "label": "fuse"
+    },
+    {
+      "id": "X16",
+      "type": "potentiometer",
+      "x": 880,
+      "y": 600,
+      "label": "potentiometer"
+    },
+    {
+      "id": "X17",
+      "type": "ground",
+      "x": 1130,
+      "y": 600,
+      "label": "ground"
+    },
+    {
+      "id": "X18",
+      "type": "terminal",
+      "x": 1380,
+      "y": 600,
+      "label": "terminal"
+    },
+    {
+      "id": "X19",
+      "type": "npn",
+      "x": 130,
+      "y": 820,
+      "label": "npn"
+    },
+    {
+      "id": "X20",
+      "type": "pnp",
+      "x": 380,
+      "y": 820,
+      "label": "pnp"
+    },
+    {
+      "id": "X21",
+      "type": "nmos",
+      "x": 630,
+      "y": 820,
+      "label": "nmos"
+    },
+    {
+      "id": "X22",
+      "type": "pmos",
+      "x": 880,
+      "y": 820,
+      "label": "pmos"
+    },
+    {
+      "id": "X23",
+      "type": "triac",
+      "x": 1130,
+      "y": 820,
+      "label": "triac"
+    },
+    {
+      "id": "X24",
+      "type": "scr",
+      "x": 1380,
+      "y": 820,
+      "label": "scr"
+    },
+    {
+      "id": "X25",
+      "type": "opamp",
+      "x": 130,
+      "y": 1040,
+      "label": "opamp"
+    },
+    {
+      "id": "X26",
+      "type": "variable_resistor",
+      "x": 380,
+      "y": 1040,
+      "label": "variable_resistor"
+    },
+    {
+      "id": "X27",
+      "type": "thermistor",
+      "x": 630,
+      "y": 1040,
+      "label": "thermistor"
+    },
+    {
+      "id": "X28",
+      "type": "variable_capacitor",
+      "x": 880,
+      "y": 1040,
+      "label": "variable_capacitor"
+    },
+    {
+      "id": "X29",
+      "type": "trimmer_capacitor",
+      "x": 1130,
+      "y": 1040,
+      "label": "trimmer_capacitor"
+    },
+    {
+      "id": "X30",
+      "type": "crystal",
+      "x": 1380,
+      "y": 1040,
+      "label": "crystal"
+    },
+    {
+      "id": "X31",
+      "type": "schottky",
+      "x": 130,
+      "y": 1260,
+      "label": "schottky"
+    },
+    {
+      "id": "X32",
+      "type": "tunnel_diode",
+      "x": 380,
+      "y": 1260,
+      "label": "tunnel_diode"
+    },
+    {
+      "id": "X33",
+      "type": "tvs_diode",
+      "x": 630,
+      "y": 1260,
+      "label": "tvs_diode"
+    },
+    {
+      "id": "X34",
+      "type": "varactor",
+      "x": 880,
+      "y": 1260,
+      "label": "varactor"
+    },
+    {
+      "id": "X35",
+      "type": "diac",
+      "x": 1130,
+      "y": 1260,
+      "label": "diac"
+    },
+    {
+      "id": "X36",
+      "type": "circuit_breaker",
+      "x": 1380,
+      "y": 1260,
+      "label": "circuit_breaker"
+    },
+    {
+      "id": "X37",
+      "type": "current_source",
+      "x": 130,
+      "y": 1480,
+      "label": "current_source"
+    },
+    {
+      "id": "X38",
+      "type": "controlled_voltage_source",
+      "x": 380,
+      "y": 1480,
+      "label": "controlled_voltage_source"
+    },
+    {
+      "id": "X39",
+      "type": "controlled_current_source",
+      "x": 630,
+      "y": 1480,
+      "label": "controlled_current_source"
+    },
+    {
+      "id": "X40",
+      "type": "pulse_source",
+      "x": 880,
+      "y": 1480,
+      "label": "pulse_source"
+    },
+    {
+      "id": "X41",
+      "type": "square_source",
+      "x": 1130,
+      "y": 1480,
+      "label": "square_source"
+    },
+    {
+      "id": "X42",
+      "type": "triangle_source",
+      "x": 1380,
+      "y": 1480,
+      "label": "triangle_source"
+    },
+    {
+      "id": "X43",
+      "type": "ramp_source",
+      "x": 130,
+      "y": 1700,
+      "label": "ramp_source"
+    },
+    {
+      "id": "X44",
+      "type": "solar_cell",
+      "x": 380,
+      "y": 1700,
+      "label": "solar_cell"
+    },
+    {
+      "id": "X45",
+      "type": "neon_lamp",
+      "x": 630,
+      "y": 1700,
+      "label": "neon_lamp"
+    },
+    {
+      "id": "X46",
+      "type": "reed_switch",
+      "x": 880,
+      "y": 1700,
+      "label": "reed_switch"
+    },
+    {
+      "id": "X47",
+      "type": "inductor_core",
+      "x": 1130,
+      "y": 1700,
+      "label": "inductor_core"
+    },
+    {
+      "id": "X48",
+      "type": "push_button",
+      "x": 1380,
+      "y": 1700,
+      "label": "push_button"
+    },
+    {
+      "id": "X49",
+      "type": "push_button_nc",
+      "x": 130,
+      "y": 1920,
+      "label": "push_button_nc"
+    },
+    {
+      "id": "X50",
+      "type": "signal_ground",
+      "x": 380,
+      "y": 1920,
+      "label": "signal_ground"
+    },
+    {
+      "id": "X51",
+      "type": "chassis_ground",
+      "x": 630,
+      "y": 1920,
+      "label": "chassis_ground"
+    },
+    {
+      "id": "X52",
+      "type": "antenna",
+      "x": 880,
+      "y": 1920,
+      "label": "antenna"
+    },
+    {
+      "id": "X53",
+      "type": "loop_antenna",
+      "x": 1130,
+      "y": 1920,
+      "label": "loop_antenna"
+    },
+    {
+      "id": "X54",
+      "type": "speaker",
+      "x": 1380,
+      "y": 1920,
+      "label": "speaker"
+    },
+    {
+      "id": "X55",
+      "type": "microphone",
+      "x": 130,
+      "y": 2140,
+      "label": "microphone"
+    },
+    {
+      "id": "X56",
+      "type": "n_jfet",
+      "x": 380,
+      "y": 2140,
+      "label": "n_jfet"
+    },
+    {
+      "id": "X57",
+      "type": "p_jfet",
+      "x": 630,
+      "y": 2140,
+      "label": "p_jfet"
+    },
+    {
+      "id": "X58",
+      "type": "n_igbt",
+      "x": 880,
+      "y": 2140,
+      "label": "n_igbt"
+    },
+    {
+      "id": "X59",
+      "type": "p_igbt",
+      "x": 1130,
+      "y": 2140,
+      "label": "p_igbt"
+    },
+    {
+      "id": "X60",
+      "type": "phototransistor",
+      "x": 1380,
+      "y": 2140,
+      "label": "phototransistor"
+    },
+    {
+      "id": "X61",
+      "type": "switch_spdt",
+      "x": 130,
+      "y": 2360,
+      "label": "switch_spdt"
+    },
+    {
+      "id": "X62",
+      "type": "switch_dpst",
+      "x": 380,
+      "y": 2360,
+      "label": "switch_dpst"
+    },
+    {
+      "id": "X63",
+      "type": "switch_dpdt",
+      "x": 630,
+      "y": 2360,
+      "label": "switch_dpdt"
+    },
+    {
+      "id": "X64",
+      "type": "relay",
+      "x": 880,
+      "y": 2360,
+      "label": "relay"
+    },
+    {
+      "id": "X65",
+      "type": "relay_spdt",
+      "x": 1130,
+      "y": 2360,
+      "label": "relay_spdt"
+    },
+    {
+      "id": "X66",
+      "type": "optocoupler",
+      "x": 1380,
+      "y": 2360,
+      "label": "optocoupler"
+    },
+    {
+      "id": "X67",
+      "type": "shunt_resistor",
+      "x": 130,
+      "y": 2580,
+      "label": "shunt_resistor"
+    },
+    {
+      "id": "X68",
+      "type": "transformer",
+      "x": 380,
+      "y": 2580,
+      "label": "transformer"
+    },
+    {
+      "id": "X69",
+      "type": "air_core_transformer",
+      "x": 630,
+      "y": 2580,
+      "label": "air_core_transformer"
+    },
+    {
+      "id": "X70",
+      "type": "center_tapped_transformer",
+      "x": 880,
+      "y": 2580,
+      "label": "center_tapped_transformer"
+    },
+    {
+      "id": "X71",
+      "type": "three_phase_transformer",
+      "x": 1130,
+      "y": 2580,
+      "label": "three_phase_transformer"
+    },
+    {
+      "id": "X72",
+      "type": "motor",
+      "x": 1380,
+      "y": 2580,
+      "label": "motor"
+    },
+    {
+      "id": "X73",
+      "type": "dc_motor",
+      "x": 130,
+      "y": 2800,
+      "label": "dc_motor"
+    },
+    {
+      "id": "X74",
+      "type": "ac_motor",
+      "x": 380,
+      "y": 2800,
+      "label": "ac_motor"
+    },
+    {
+      "id": "X75",
+      "type": "three_phase_motor",
+      "x": 630,
+      "y": 2800,
+      "label": "three_phase_motor"
+    },
+    {
+      "id": "X76",
+      "type": "generator",
+      "x": 880,
+      "y": 2800,
+      "label": "generator"
+    },
+    {
+      "id": "X77",
+      "type": "ammeter",
+      "x": 1130,
+      "y": 2800,
+      "label": "ammeter"
+    },
+    {
+      "id": "X78",
+      "type": "voltmeter",
+      "x": 1380,
+      "y": 2800,
+      "label": "voltmeter"
+    },
+    {
+      "id": "X79",
+      "type": "ohmmeter",
+      "x": 130,
+      "y": 3020,
+      "label": "ohmmeter"
+    },
+    {
+      "id": "X80",
+      "type": "frequency_meter",
+      "x": 380,
+      "y": 3020,
+      "label": "frequency_meter"
+    },
+    {
+      "id": "X81",
+      "type": "power_factor_meter",
+      "x": 630,
+      "y": 3020,
+      "label": "power_factor_meter"
+    },
+    {
+      "id": "X82",
+      "type": "energy_meter",
+      "x": 880,
+      "y": 3020,
+      "label": "energy_meter"
+    },
+    {
+      "id": "X83",
+      "type": "wattmeter",
+      "x": 1130,
+      "y": 3020,
+      "label": "wattmeter"
+    },
+    {
+      "id": "X84",
+      "type": "varistor",
+      "x": 1380,
+      "y": 3020,
+      "label": "varistor"
+    },
+    {
+      "id": "X85",
+      "type": "ntc_thermistor",
+      "x": 130,
+      "y": 3240,
+      "label": "ntc_thermistor"
+    },
+    {
+      "id": "X86",
+      "type": "ptc_thermistor",
+      "x": 380,
+      "y": 3240,
+      "label": "ptc_thermistor"
+    },
+    {
+      "id": "X87",
+      "type": "trimmer_resistor",
+      "x": 630,
+      "y": 3240,
+      "label": "trimmer_resistor"
+    },
+    {
+      "id": "X88",
+      "type": "autotransformer",
+      "x": 880,
+      "y": 3240,
+      "label": "autotransformer"
+    },
+    {
+      "id": "X89",
+      "type": "comparator",
+      "x": 1130,
+      "y": 3240,
+      "label": "comparator"
+    },
+    {
+      "id": "X90",
+      "type": "variable_inductor",
+      "x": 1380,
+      "y": 3240,
+      "label": "variable_inductor"
+    },
+    {
+      "id": "X91",
+      "type": "contact_no",
+      "x": 130,
+      "y": 3460,
+      "label": "contact_no"
+    },
+    {
+      "id": "X92",
+      "type": "contact_nc",
+      "x": 380,
+      "y": 3460,
+      "label": "contact_nc"
+    },
+    {
+      "id": "X93",
+      "type": "relay_coil",
+      "x": 630,
+      "y": 3460,
+      "label": "relay_coil"
+    },
+    {
+      "id": "X94",
+      "type": "switch_nc",
+      "x": 880,
+      "y": 3460,
+      "label": "switch_nc"
+    }
+  ]
+}

@@ -19,17 +19,21 @@ This document summarizes the main third-party components used by Lyra Code. It i
 | Jakarta Activation fork for Android (`com.sun.mail:android-activation`) | Eclipse Public License 2.0 | MIME data handlers used by mail attachments. The packaged JAR retains its license and notice resources. |
 | mwiede JSch | BSD/ISC-style licenses; includes bundled license files | SSH client. Check upstream `LICENSE.txt`, `LICENSE.JZlib.txt`, and `LICENSE.jBCrypt.txt`. |
 | JetBrains Markdown / RikkaHub fork | Apache License 2.0 | Markdown parser/rendering support. |
+| AndroidSVG 1.4 | Apache License 2.0 | Native static SVG parsing and rendering for assistant messages and media previews. Copyright 2013 Paul LeBeau, Cave Rock Software Ltd. |
 | Mermaid 11.17.2 | MIT; distributable retains transitive dependency notices | Offline diagram rendering. Pinned npm distributable and original license are packaged in `app/src/main/assets/charts`. |
+| Schemdraw 0.23 symbol geometry | MIT | Selected circuit symbol geometry is generated into the offline catalog by `tools/generate_circuit_symbols.py`. Python and Schemdraw are regeneration tools, not APK runtime dependencies. Preserve the copyright notice and `app/src/main/assets/charts/SCHEMDRAW-LICENSE`; both native and browser catalog snapshots retain provenance. Lyra's functional symbols and renderer remain AGPL-3.0. |
 | Apache ECharts 6.1.0 | Apache License 2.0; bundled D3 portions retain BSD notices | Offline data-chart rendering. Original `LICENSE`, `NOTICE` and D3 license are packaged in `app/src/main/assets/charts`. |
 | Sora Editor (`io.github.rosemoe:editor`, `language-textmate`) | GNU LGPL 2.1 or later | Android code editor, line numbers, search, wrapping, and TextMate integration. Preserve the LGPL notice and allow replacement/relinking of the library as required by the license. |
 | Sora Editor demo TextMate themes and language bundles | Upstream component licenses, primarily MIT-style; distributed by the Sora Editor project | Syntax/theme assets for Java, Kotlin, Python, JavaScript, HTML, XML, Markdown, and Lua were copied from the official Sora Editor demo assets. Retain upstream notices when redistributing source assets. |
 | JLaTeXMath Android / local fork | GPL v2 or later with a special linking exception; distributed under GPL v3 for this combination | LaTeX rendering. Its independent-module linking exception and GPL v2-or-later grant permit combination with Lyra Code under AGPL v3. Keep `third_party/jlatexmath/LICENSE`, `COPYING`, `src/main/assets/org/scilab/forge/jlatexmath/licences/GPL-3.0.txt`, and the font licenses with distributions. |
 | Bundled JLaTeXMath core fonts | SIL OFL 1.1, Knuth/Computer Modern terms, permissive terms, or Public Domain, depending on the font | The optional upstream `jlatexmath-font-greek` module and its GPL-2.0-only fonts are excluded from this repository and every build. See `third_party/jlatexmath/LICENSE` and `third_party/jlatexmath/src/main/assets/org/scilab/forge/jlatexmath/fonts/licences/`. |
-| PRoot for Android | GNU GPL 2.0 or later; GPL v3 selected for this distribution | Every APK packages the repository-local ARM64 and x86_64 executables and loaders in `app/src/debianRuntime/jniLibs`, built from Soffd/proot main commit ad19f51716f6560075f1e6e40f1ebe82f2f239c6 with NDK 29.0.14206865, API 24, and static talloc 2.5.0. Builds never fetch these artifacts from the network and fail if their fixed SHA-256 values do not match. Corresponding source is maintained at `Soffd/proot`; its immediate upstream is `termux/proot`, whose upstream is `proot-me/proot`. PRoot source notices permit GPL version 2 or any later version, and Lyra Code exercises the GPLv3 option when distributing it with this AGPL-v3 application. The in-app Open Source Licenses page contains the source chain, artifact hashes, copyright notice, and complete GPLv3 terms. |
+| PRoot for Android | GNU GPL 2.0 or later; GPL v3 selected for this distribution | Every APK packages the repository-local ARM64 and x86_64 executables and loaders in `app/src/debianRuntime/jniLibs`, built from Soffd/proot main commit 683e77029a47a26894347c5a3fbce74450aeb37e with NDK 29.0.14206865, API 24, and static talloc 2.5.0. Builds never fetch these artifacts from the network and fail if their fixed SHA-256 values do not match. Corresponding source is maintained at `Soffd/proot`; its immediate upstream is `termux/proot`, whose upstream is `proot-me/proot`. PRoot source notices permit GPL version 2 or any later version, and Lyra Code exercises the GPLv3 option when distributing it with this AGPL-v3 application. The in-app Open Source Licenses page contains the source chain, artifact hashes, copyright notice, and complete GPLv3 terms. |
 | RikkaHub workspace runtime artifacts | GNU AGPL 3.0 | The pinned PRoot binaries and the Android `nativeLibraryDir` execution approach were obtained from RikkaHub's workspace module. The PRoot binaries retain their own GPL-2.0-or-later terms; RikkaHub's AGPL-3.0 license covers its own project material and does not replace the PRoot license. |
 | Debian Trixie ARM64 / amd64 root filesystems (on-demand download) | Per-package Debian licenses | The pinned rootfs is produced by the official `debuerreotype/docker-debian-artifacts` project. It is not stored in the APK; supported users can request a verified download. It contains many independently licensed Debian packages whose package copyright/license information must be preserved. |
 
 ## Test-Only Dependencies
+
+The web companion additionally packages the repository's existing Marked (MIT) and DOMPurify (Apache-2.0 or MPL-2.0) distributions for offline Markdown rendering and sanitization. Their original notices are retained in `app/src/main/assets/web-access/marked-LICENSE.txt` and `dompurify-LICENSE.txt`.
 
 | Component | License | Notes |
 | --- | --- | --- |
@@ -45,11 +49,11 @@ This document summarizes the main third-party components used by Lyra Code. It i
 - Do not add the optional upstream `jlatexmath-font-greek` module or any of `jlm_fcmbipg.ttf`, `jlm_fcmripg.ttf`, `jlm_fcmrpg.ttf`, `jlm_fcsropg.ttf`, `jlm_fcmbpg.ttf`, `jlm_fcsbpg.ttf`, `jlm_fctrpg.ttf`, or `jlm_fcsrpg.ttf`. Those fonts are GPL-2.0-only and are rejected by the JLaTeXMath pre-build verification task.
 - Lyra Code original code is licensed only under AGPL-3.0. Distributors must also comply with all applicable third-party licenses or replace those components with separately licensed alternatives.
 
-### PRoot 5.1.107.91-lyra.3 binary checksums
+### PRoot 5.1.107.100-lyra.4 binary checksums
 
-- arm64-v8a/libproot_exec.so SHA-256: 3b641ecd1b04ba0d1d798cd602f3d4aa11010d052d2b9fb3e7f166390105a340
-- arm64-v8a/libproot_loader.so SHA-256: 39f8d98f345bd2f0cff53b6a9ee54418cec340f4738d6bdd2fb03112654a6183
-- x86_64/libproot_exec.so SHA-256: 3b4fd8359bddff1b569785f65ea3f370647f9dde8e11cb8091508944ad3179d1
+- arm64-v8a/libproot_exec.so SHA-256: ce41048eb45feb85862e273be648b1820f3747a4226fdfe8217272bcf0933597
+- arm64-v8a/libproot_loader.so SHA-256: 825d0362db3319c2b3ed3b75fe300287c0f9eeb7f2427ceb05a4a004ad33ed12
+- x86_64/libproot_exec.so SHA-256: 508c63bb10cc4209daa33f58f8b41bcfd344cd43fd929339e927b12b1957f8af
 - x86_64/libproot_loader.so SHA-256: 61b2dd1a858caddbab4647c519cfe0c23bbd2d47981358b9cc6ae818e79e6869
 
-Rebuild instructions: app/src/debianRuntime/jniLibs/README.md. Corresponding source is included in `proot_src/`, retaining 7266fb3 and adding 8f467b0, a396094, 58c3b42, 8b99415 and d4d2a19. RikkaHub binaries are unpackaged recovery references only.
+Rebuild instructions: app/src/debianRuntime/jniLibs/README.md. Corresponding source is included in `proot_src/`, retaining 7266fb3, the previous fixes through d4d2a19, and all nine October commits: a179d3e, 37c09de, bd6d55e, c1cd48d, b5af02e, 7fca80c, 60a9c15, 254202b and b8c1f5c. The ARM64 external loader is linked at the updated 0x5400000000 address. RikkaHub binaries are unpackaged recovery references only.

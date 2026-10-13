@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_access_title">Web access</string>
+    <string name="web_access_desc">Use your desktop browser to chat, upload files, and adjust agent settings in sync with your phone.</string>
+    <string name="web_access_lan">Listen on LAN / all network interfaces</string>
+    <string name="web_access_port">Port (1024–65535)</string>
+    <string name="web_access_start">Start web access</string>
+    <string name="web_access_stop">Stop web access</string>
+    <string name="web_access_addresses">Access addresses</string>
+    <string name="web_access_token">Access code</string>
+    <string name="web_access_copy">Copy</string>
+    <string name="web_access_reset_token">Reset access code</string>
+    <string name="web_access_hint">Keep Lyra Code in the foreground to keep the screen on. Closing the Activity stops web access. Select shared-storage directories on the phone first. For public access, configure port forwarding or an HTTPS reverse proxy; keep the access code private.</string>
+    <string name="web_access_notification">Web access is running. Tap to return to the app.</string>
+    <string name="web_access_storage_permission">All files access</string>
+    <string name="web_access_storage_desc">The web directory browser reads shared storage directly. Grant All files access on this phone to browse and select folders without an SAF picker.</string>
+</resources>

@@ -7,7 +7,8 @@ if(NOT ANDROID)
 endif()
 
 if(ANDROID_ABI STREQUAL "arm64-v8a")
-    set(PROOT_LOADER_ADDRESS 0x2000000000)
+    # Keep the external loader at the ARM64 LOADER_ADDRESS in src/arch.h.
+    set(PROOT_LOADER_ADDRESS 0x5400000000)
 elseif(ANDROID_ABI STREQUAL "x86_64")
     set(PROOT_LOADER_ADDRESS 0x600000000000)
 else()
@@ -18,7 +19,7 @@ get_filename_component(PROOT_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../src" REALP
 set(TALLOC_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../talloc-2.5.0" CACHE PATH
     "Path to the unpacked talloc 2.5.0 source tree")
 get_filename_component(TALLOC_SOURCE_DIR "${TALLOC_SOURCE_DIR}" REALPATH)
-set(PROOT_VERSION "5.1.107.91-lyra.3" CACHE STRING "Version embedded in proot --version")
+set(PROOT_VERSION "5.1.107.100-lyra.4" CACHE STRING "Version embedded in proot --version")
 
 if(NOT EXISTS "${TALLOC_SOURCE_DIR}/talloc.c" OR
    NOT EXISTS "${TALLOC_SOURCE_DIR}/talloc.h" OR

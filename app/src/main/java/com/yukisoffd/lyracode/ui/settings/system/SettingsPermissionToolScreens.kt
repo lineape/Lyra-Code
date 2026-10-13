@@ -679,7 +679,7 @@ internal fun appPermissionRows(context: Context, termuxExecutor: TermuxExecutor)
     }
 }
 
-private tailrec fun Context.findMainActivity(): MainActivity? = when (this) {
+internal tailrec fun Context.findMainActivity(): MainActivity? = when (this) {
     is MainActivity -> this
     is ContextWrapper -> baseContext.findMainActivity()
     else -> null
@@ -741,6 +741,7 @@ internal fun agentToolCatalog(): List<AgentToolInfo> = listOf(
     AgentToolInfo("read_web_page", uiText(R.string.tool_read_web_page), uiText(R.string.tool_read_web_page_desc)),
     AgentToolInfo("mark_web_sources", uiText(R.string.tool_mark_web_sources), uiText(R.string.tool_mark_web_sources_desc)),
     AgentToolInfo("create_chart", uiText(R.string.tool_create_chart), uiText(R.string.tool_create_chart_desc)),
+    AgentToolInfo("get_circuit_symbols", uiText(R.string.tool_get_circuit_symbols), uiText(R.string.tool_get_circuit_symbols_desc)),
     AgentToolInfo("manage_app_config", uiText(R.string.tool_manage_app_config), uiText(R.string.ui_add_edit_enable_disable_or_delete_mcp_ssh_email)),
     AgentToolInfo("get_current_time", uiText(R.string.tool_get_time), uiText(R.string.tool_get_time_desc)),
     AgentToolInfo("get_current_location", uiText(R.string.tool_get_location), uiText(R.string.tool_get_location_desc)),

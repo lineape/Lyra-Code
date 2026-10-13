@@ -20,9 +20,15 @@ class WorkspaceManager(
         val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         if (uri.scheme == ProotWorkspace.SCHEME) {
             ProotWorkspace.directory(context, uri)
+        } else if (uri.scheme == "file") {
+            SharedStorageWorkspace.directory(context, uri)
         } else {
             require(uri.scheme == "content") { uiText(R.string.workspace_error_unsupported) }
-            context.contentResolver.takePersistableUriPermission(uri, flags)
+            val anchor = DocumentsContract.buildTreeDocumentUri(uri.authority, DocumentsContract.getTreeDocumentId(uri))
+            if (context.contentResolver.persistedUriPermissions.none { it.uri == anchor && it.isReadPermission && it.isWritePermission }) {
+                context.contentResolver.takePersistableUriPermission(uri, flags)
+            }
+            require(grantedWorkspaceDirectory(context, uri)?.isDirectory == true) { uiText(R.string.workspace_error_missing) }
         }
         val nextUri = uri.toString()
         if (activeWorkspaceUri != nextUri) {
@@ -53,7 +59,8 @@ class WorkspaceManager(
         if (uri.scheme == ProotWorkspace.SCHEME) {
             return runCatching { ProotWorkspace.document(context, uri) }.getOrNull()
         }
-        return DocumentFile.fromTreeUri(context, uri)
+        if (uri.scheme == "file") return runCatching { androidx.documentfile.provider.SharedStorageDocumentFile(context,SharedStorageWorkspace.directory(context, uri)) }.getOrNull()
+        return grantedWorkspaceDirectory(context, uri)
     }
 
     fun displayName(): String = if (prootLinuxId() != null) {
@@ -63,7 +70,8 @@ class WorkspaceManager(
     fun displayPath(): String? {
         val uri = rootUri() ?: return null
         if (uri.scheme == ProotWorkspace.SCHEME) return "${uri.authority}:${uri.path}"
-        val docId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull() ?: return root()?.name
+        if (uri.scheme == "file") return runCatching { SharedStorageWorkspace.directory(context, uri).path }.getOrNull()
+        val docId = runCatching { if (DocumentsContract.isDocumentUri(context, uri)) DocumentsContract.getDocumentId(uri) else DocumentsContract.getTreeDocumentId(uri) }.getOrNull() ?: return root()?.name
         val split = docId.split(":", limit = 2)
         if (split.size != 2) return root()?.name
         val relative = split[1].trimStart('/')
@@ -90,7 +98,8 @@ class WorkspaceManager(
         if (uri.scheme == ProotWorkspace.SCHEME) {
             return runCatching { ProotWorkspace.directory(context, uri).absolutePath }.getOrNull()
         }
-        val docId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull() ?: return null
+        if (uri.scheme == "file") return runCatching { SharedStorageWorkspace.directory(context, uri).path }.getOrNull()
+        val docId = runCatching { if (DocumentsContract.isDocumentUri(context, uri)) DocumentsContract.getDocumentId(uri) else DocumentsContract.getTreeDocumentId(uri) }.getOrNull() ?: return null
         val split = docId.split(":", limit = 2)
         if (split.size != 2) return null
         return when (split[0]) {

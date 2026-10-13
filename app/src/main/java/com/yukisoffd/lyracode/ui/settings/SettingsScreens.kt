@@ -92,6 +92,7 @@ internal fun SettingsScreen(
     backupManager: BackupManager,
     miniServerManager: MiniServerManager,
     localMcpServerManager: LocalMcpServerManager,
+    webAccessManager: com.yukisoffd.lyracode.webaccess.WebAccessManager,
     skills: List<SkillPack>,
     skillStatus: String,
     backupStatus: String,
@@ -153,6 +154,7 @@ internal fun SettingsScreen(
         "mcp_tool_detail" -> "mcp_tools"
         "github_acceleration" -> if (externalGitHubAccelerationUrl != null) gitHubAccelerationReturnDetail else "about"
         "device" -> "about"
+        "sponsor_development" -> "about"
         CompliancePageIds.INDEX -> "about"
         CompliancePageIds.USER_AGREEMENT,
         CompliancePageIds.PRIVACY_POLICY,
@@ -368,6 +370,7 @@ internal fun SettingsScreen(
                     })
                     "mcp_tool_detail" -> McpToolDetailPage(settings, mcpToolServerId, mcpToolName, controller.settingsRevision.intValue)
                     "local_mcp" -> LocalMcpServerSettings(settings, localMcpServerManager, controller.settingsRevision.intValue)
+                    "web_access" -> WebAccessSettings(settings, webAccessManager)
                     "ssh" -> SshSettings(settings, sshExecutor, controller.settingsRevision.intValue)
                     "email" -> EmailSettings(settings, controller.settingsRevision.intValue)
                     "webdav" -> WebDavSettings(settings, webDavClient, controller.settingsRevision.intValue)
@@ -394,7 +397,7 @@ internal fun SettingsScreen(
                         onConfigChanged = { controller.settingsRevision.intValue++ },
                     )
                     "storage" -> StorageCacheSettings()
-                    "prompts" -> PromptSettingsScreen(settings)
+                    "prompts" -> PromptSettingsScreen(settings, controller.settingsRevision.intValue)
                     "memories" -> MemorySettingsScreen(settings)
                     "skills" -> SkillsScreen(
                         skills = skills,
@@ -411,6 +414,7 @@ internal fun SettingsScreen(
                         onUpdateAvailabilityChange = onUpdateAvailabilityChange,
                         onOpenDeviceInfo = { detail = "device" },
                         onOpenServiceAgreements = { detail = CompliancePageIds.INDEX },
+                        onOpenSponsorDevelopment = { detail = "sponsor_development" },
                         onOpenGitHubAcceleration = { url ->
                             gitHubAccelerationTestUrl = url
                             detail = "github_acceleration"
@@ -420,6 +424,7 @@ internal fun SettingsScreen(
                     )
                     "github_acceleration" -> GitHubAccelerationSettingsScreen(initialTestUrl = gitHubAccelerationTestUrl)
                     "device" -> DeviceInfoScreen()
+                    "sponsor_development" -> SponsorDevelopmentScreen()
                     CompliancePageIds.INDEX -> ServiceAgreementScreen(onOpenDocument = { detail = it })
                     CompliancePageIds.USER_AGREEMENT,
                     CompliancePageIds.PRIVACY_POLICY,
@@ -447,6 +452,7 @@ internal fun SettingsScreen(
             SettingsMenuEntry(Icons.Default.CloudSync, context.getString(R.string.menu_webdav), context.getString(R.string.menu_webdav_desc), "webdav"),
             SettingsMenuEntry(Icons.Default.SyncAlt, context.getString(R.string.menu_file_transfer), context.getString(R.string.menu_file_transfer_desc), "file_transfer"),
             SettingsMenuEntry(Icons.Default.Lan, context.getString(R.string.menu_mini_server), context.getString(R.string.menu_mini_server_desc), "mini_server"),
+            SettingsMenuEntry(Icons.Default.DesktopWindows, context.getString(R.string.web_access_title), context.getString(R.string.web_access_desc), "web_access"),
         )
         val personalizationEntries = listOf(
             SettingsMenuEntry(
@@ -667,6 +673,7 @@ internal fun settingsDetailTitle(context: Context, detail: String): String = whe
     "mcp_tools" -> context.getString(R.string.mcp_tools_page_title)
     "mcp_tool_detail" -> context.getString(R.string.mcp_tool_details)
     "local_mcp" -> context.getString(R.string.detail_local_mcp)
+    "web_access" -> context.getString(R.string.web_access_title)
     "ssh" -> context.getString(R.string.detail_ssh)
     "email" -> context.getString(R.string.detail_email)
     "webdav" -> context.getString(R.string.detail_webdav)
@@ -680,6 +687,7 @@ internal fun settingsDetailTitle(context: Context, detail: String): String = whe
     "licenses" -> context.getString(R.string.detail_licenses)
     "about" -> context.getString(R.string.detail_about)
     "github_acceleration" -> context.getString(R.string.github_acceleration_title)
+    "sponsor_development" -> context.getString(R.string.sponsor_development_title)
     "device" -> context.getString(R.string.detail_device)
     CompliancePageIds.INDEX -> context.getString(R.string.compliance_service_agreements)
     CompliancePageIds.USER_AGREEMENT -> context.getString(R.string.compliance_user_agreement)

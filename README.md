@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-4.0.7-blue" />
+  <img alt="Version" src="https://img.shields.io/badge/version-4.1.0-blue" />
   <img alt="Android" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white" />
   <img alt="PRoot Linux" src="https://img.shields.io/badge/PRoot-Linux-FCC624?logo=linux&logoColor=black" />
   <img alt="Termux" src="https://img.shields.io/badge/Termux-integrated-000000" />
@@ -54,7 +54,8 @@ PRoot is available without installing Termux; the two modes can coexist. PRoot u
 - Sora Editor with TextMate highlighting, line numbers, search, navigation, wrapping, `.bak` backups, and an AI editing panel; plus a dual-pane Android file manager.
 - MCP client/server, SSH, SMTP/IMAP, WebDAV, FTP/FTPS/SFTP, native HTTP/HTTPS downloads, and natural-language configuration.
 - Importable Skills, image input and annotation, Markdown/LaTeX/media rendering, device diagnostics, usage statistics, and local/WebDAV backups.
-- AI charts rendered offline in answers: flowcharts, sequence diagrams, Gantt charts, line/bar/pie charts, mind maps, architecture and relationship diagrams, with fullscreen viewing and PNG/SVG/source export. See [inline charts](docs/CHARTS.md).
+- SVG previews in AI answers: raw inline SVG, `svg` code fences, and SVG data URLs (percent encoded or Base64), with fullscreen viewing and original `.svg` saving. Static images use AndroidSVG; SMIL and CSS animations play through an isolated WebView image renderer. SVG scripts, external resources, and interactive document events are disabled. Static AndroidSVG previews do not support filters or `foreignObject`.
+- AI charts rendered offline in answers: flowcharts, sequence diagrams, Gantt charts, line/bar/pie charts, mind maps, architecture and relationship diagrams, and electrical circuit schematics, with fullscreen viewing and PNG/SVG/source export. See [inline charts](docs/CHARTS.md).
 - Optional Shizuku and Root tools, each independently switchable.
 
 ## Getting started
@@ -79,6 +80,10 @@ Then grant the Termux `RUN_COMMAND` permission from Lyra Code settings. Without 
 - Workspace selection starts with shared storage or proot. Shared storage keeps the system directory permission flow; proot lets you choose a Linux ID and then a directory inside that instance. Proot workspaces use the app-private filesystem without shared-storage permissions, supporting development with Unix permissions, symbolic links, and binary files.
 - Linux rootfs instances are mutable app data. Clearing app data or uninstalling Lyra Code removes them, and they are excluded from Android cloud backup/device transfer.
 - See [App-internal PRoot Linux environments](docs/DEBIAN_RUNTIME.md) for supported archives, lifecycle, storage, limitations, and source information.
+
+## Web access
+
+Start **Settings → Web access** on your phone, then open its address in a desktop browser and enter the access code. Chat, upload desktop files, browse session history, and adjust agent settings in sync with the phone. The foreground Activity keeps the screen awake while the service runs. See [Web access](docs/WEB_ACCESS.md) for LAN/public access, directory permissions, and verification.
 
 ## Build
 

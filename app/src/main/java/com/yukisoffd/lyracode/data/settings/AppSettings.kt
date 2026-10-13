@@ -82,6 +82,23 @@ class AppSettings(context: Context) {
         get() = plainPrefs.getString(KEY_WORKSPACE_URI, null)
         set(value) = plainPrefs.edit().putString(KEY_WORKSPACE_URI, value).apply()
 
+    var webAccessHost: String
+        get() = plainPrefs.getString("web_access_host", "0.0.0.0").orEmpty()
+        set(value) { require(value in listOf("0.0.0.0", "127.0.0.1")); plainPrefs.edit().putString("web_access_host", value).apply() }
+
+    var webAccessPort: Int
+        get() = plainPrefs.getInt("web_access_port", 8792).coerceIn(1024, 65535)
+        set(value) { require(value in 1024..65535); plainPrefs.edit().putInt("web_access_port", value).apply() }
+
+    val webAccessToken: String
+        get() = securePrefs.getString("web_access_token", null)?.takeIf { it.isNotBlank() } ?: resetWebAccessToken()
+
+    fun resetWebAccessToken(): String {
+        val token = ByteArray(24).also { java.security.SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
+        securePrefs.edit().putString("web_access_token", token).apply()
+        return token
+    }
+
     var apiKey: String
         get() = securePrefs.getString(KEY_API_KEY, "").orEmpty()
         set(value) = securePrefs.edit().putString(KEY_API_KEY, value.trim()).apply()

@@ -130,6 +130,7 @@ class ChatController(
     val editorFileChangeRevision = mutableIntStateOf(0)
     val todoItems = mutableStateListOf<TodoItem>()
     val settingsRevision = mutableIntStateOf(0)
+    val sessionRevision = mutableIntStateOf(0)
     val contextWindowUsage = mutableStateOf(ContextWindowUsage())
     val messagesLoading = mutableStateOf(false)
     private var messageLoadJob: Job? = null
@@ -283,6 +284,7 @@ class ChatController(
     }
 
     private fun showTransientNewConversation(projectId: Long = 0L) {
+        sessionRevision.intValue++
         val project = projectId.takeIf { it > 0L }?.let(conversationStore::project)
         messageLoadJob?.cancel()
         messagesLoading.value = false
@@ -334,6 +336,7 @@ class ChatController(
     }
 
     fun selectConversation(id: Long) {
+        sessionRevision.intValue++
         _messages.value = emptyList()
         updatesDuringLoad.clear()
         contextWindowUsage.value = ContextWindowUsage()
@@ -899,6 +902,7 @@ class ChatController(
     fun continueActive() {
         val conversationId = activeConversationId.value.takeIf { it > 0 } ?: return
         if (jobs[conversationId]?.isActive == true) return
+        if (conversationStore.conversation(conversationId)?.status != ConversationStore.STATUS_INTERRUPTED) return
         conversationStore.conversation(conversationId)?.let { workspaceManager.setActiveWorkspaceUri(it.workspaceUri) }
         val profile = currentProfile()
         val model = activeModel.value.ifBlank { profile.selectedModel }
@@ -1296,6 +1300,9 @@ class ChatController(
     }
 
     fun isActiveConversationRunning(): Boolean = conversationOperations.containsKey(activeConversationId.value)
+
+    fun canContinueActive(): Boolean = !isActiveConversationRunning() &&
+        activeConversation()?.status == ConversationStore.STATUS_INTERRUPTED
 
     fun isActiveConversationGenerating(): Boolean =
         conversationOperations[activeConversationId.value] == ConversationOperation.GENERATING

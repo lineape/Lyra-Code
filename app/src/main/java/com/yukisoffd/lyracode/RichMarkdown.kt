@@ -188,7 +188,7 @@ internal fun RichMarkdownContent(
 }
 
 private fun parseRichMarkdown(content: String, fallback: Boolean = false): RichMarkdownParseResult {
-    val preprocessed = if (fallback) content else preProcessMarkdownLatex(content)
+    val preprocessed = if (fallback) content else preProcessMarkdownLatex(normalizeMarkdownSvg(content))
     return RichMarkdownParseResult(
         content = preprocessed,
         root = richMarkdownParser.buildMarkdownTreeFromString(preprocessed),
@@ -370,7 +370,7 @@ private fun RichHeading(node: ASTNode, content: String) {
 private fun RichParagraph(node: ASTNode, content: String) {
     if (node.findChildOfTypeRecursive(MarkdownElementTypes.IMAGE, GFMElementTypes.BLOCK_MATH) != null) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            node.children.fastForEach { child -> RichInlineAsBlock(child, content) }
+            RichInlineBlocks(node.children, content)
         }
         return
     }
@@ -378,12 +378,33 @@ private fun RichParagraph(node: ASTNode, content: String) {
 }
 
 @Composable
-private fun RichInlineAsBlock(node: ASTNode, content: String) {
-    when (node.type) {
-        MarkdownElementTypes.IMAGE -> RichImage(node, content)
-        GFMElementTypes.BLOCK_MATH -> RichMathBlock(node.getTextInNode(content))
-        else -> RichInlineText(listOf(node), content)
+private fun RichInlineBlocks(nodes: List<ASTNode>, content: String) {
+    val text = mutableListOf<ASTNode>()
+    @Composable
+    fun flushText() {
+        if (text.isNotEmpty()) {
+            if (text.any { it.getTextInNode(content).isNotBlank() }) RichInlineText(text.toList(), content)
+            text.clear()
+        }
     }
+    nodes.fastForEach { node ->
+        when {
+            node.type == MarkdownElementTypes.IMAGE -> {
+                flushText()
+                RichImage(node, content)
+            }
+            node.type == GFMElementTypes.BLOCK_MATH -> {
+                flushText()
+                RichMathBlock(node.getTextInNode(content))
+            }
+            node.findChildOfTypeRecursive(MarkdownElementTypes.IMAGE, GFMElementTypes.BLOCK_MATH) != null -> {
+                flushText()
+                RichInlineBlocks(node.children, content)
+            }
+            else -> text += node
+        }
+    }
+    flushText()
 }
 
 @Composable
@@ -456,7 +477,11 @@ private fun RichCodeFence(node: ASTNode, content: String) {
     val end = node.children.lastOrNull { it.type == MarkdownTokenTypes.CODE_FENCE_CONTENT }?.endOffset ?: start
     val code = content.substring(start, end).trimEnd()
     val closed = raw.lineSequence().lastOrNull()?.trim()?.let { it.length >= marker.length && it.all { char -> char == marker.firstOrNull() } } == true
-    if (isChartLanguage(language) && closed) ChartBlock(language, code) else RichCodeBlock(code, language)
+    when {
+        isChartLanguage(language) && closed -> ChartBlock(language, code)
+        language.equals("svg", true) && closed && looksLikeSvg(code) -> MarkdownMediaPreview("SVG", code)
+        else -> RichCodeBlock(code, language)
+    }
 }
 
 @Composable
@@ -752,7 +777,7 @@ private fun RichInlineTextLine(nodes: List<ASTNode>, content: String) {
     val codeFontFamily = LocalCodeFontFamily.current
     val inlineContents = remember { mutableStateMapOf<String, InlineTextContent>() }
     val key = remember(nodes, content) { nodes.joinToString("|") { "${it.startOffset}:${it.endOffset}:${it.type}" } }
-    val annotated = remember(key, colorScheme, textStyle, density, streamingFade, codeFontFamily) {
+    val annotated = remember(key, content, colorScheme, textStyle, density, streamingFade, codeFontFamily) {
         inlineContents.clear()
         buildAnnotatedString {
             nodes.fastForEach {

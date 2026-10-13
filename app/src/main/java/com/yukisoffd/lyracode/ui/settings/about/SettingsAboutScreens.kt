@@ -133,6 +133,8 @@ internal fun OpenSourceLicensesScreen() {
                 LicenseTexts.EPL_2_0,
             ),
             LicenseNotice("JetBrains Markdown / RikkaHub Markdown fork", "Apache License 2.0", uiText(R.string.ui_markdown_gfm_ast_parsing_with_tables_lists_and_math), LicenseTexts.APACHE_2_0),
+            LicenseNotice("AndroidSVG 1.4", "Apache License 2.0", uiText(R.string.ui_native_svg_rendering),
+                "Copyright 2013 Paul LeBeau, Cave Rock Software Ltd.\n\n" + LicenseTexts.APACHE_2_0),
             LicenseNotice("Mermaid 11.17.2", "MIT", uiText(R.string.tool_create_chart_desc),
                 context.assets.open("charts/MERMAID-LICENSE").bufferedReader().use { it.readText() }),
             LicenseNotice("Schemdraw 0.23 symbol geometry", "MIT", uiText(R.string.tool_get_circuit_symbols_desc),

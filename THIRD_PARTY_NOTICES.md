@@ -19,6 +19,7 @@ This document summarizes the main third-party components used by Lyra Code. It i
 | Jakarta Activation fork for Android (`com.sun.mail:android-activation`) | Eclipse Public License 2.0 | MIME data handlers used by mail attachments. The packaged JAR retains its license and notice resources. |
 | mwiede JSch | BSD/ISC-style licenses; includes bundled license files | SSH client. Check upstream `LICENSE.txt`, `LICENSE.JZlib.txt`, and `LICENSE.jBCrypt.txt`. |
 | JetBrains Markdown / RikkaHub fork | Apache License 2.0 | Markdown parser/rendering support. |
+| AndroidSVG 1.4 | Apache License 2.0 | Native static SVG parsing and rendering for assistant messages and media previews. Copyright 2013 Paul LeBeau, Cave Rock Software Ltd. |
 | Mermaid 11.17.2 | MIT; distributable retains transitive dependency notices | Offline diagram rendering. Pinned npm distributable and original license are packaged in `app/src/main/assets/charts`. |
 | Schemdraw 0.23 symbol geometry | MIT | Selected circuit symbol geometry is generated into the offline catalog by `tools/generate_circuit_symbols.py`. Python and Schemdraw are regeneration tools, not APK runtime dependencies. Preserve the copyright notice and `app/src/main/assets/charts/SCHEMDRAW-LICENSE`; both native and browser catalog snapshots retain provenance. Lyra's functional symbols and renderer remain AGPL-3.0. |
 | Apache ECharts 6.1.0 | Apache License 2.0; bundled D3 portions retain BSD notices | Offline data-chart rendering. Original `LICENSE`, `NOTICE` and D3 license are packaged in `app/src/main/assets/charts`. |

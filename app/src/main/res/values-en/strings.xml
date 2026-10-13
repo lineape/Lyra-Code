@@ -2327,4 +2327,5 @@ Revocation stops new access through that permission but does not automatically e
     <string name="sponsor_save_code">Save appreciation code</string>
     <string name="sponsor_save_success">Appreciation code saved</string>
     <string name="sponsor_save_failed">Unable to save the appreciation code. Please try again.</string>
+    <string name="ui_native_svg_rendering">Static SVG rendering for messages and media previews</string>
 </resources>

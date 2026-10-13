@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-4.0.7-blue" />
+  <img alt="Version" src="https://img.shields.io/badge/version-4.1.0-blue" />
   <img alt="Android" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white" />
   <img alt="PRoot Linux" src="https://img.shields.io/badge/PRoot-Linux-FCC624?logo=linux&logoColor=black" />
   <img alt="Termux" src="https://img.shields.io/badge/Termux-integrated-000000" />
@@ -54,6 +54,7 @@ PRoot is available without installing Termux; the two modes can coexist. PRoot u
 - Sora Editor with TextMate highlighting, line numbers, search, navigation, wrapping, `.bak` backups, and an AI editing panel; plus a dual-pane Android file manager.
 - MCP client/server, SSH, SMTP/IMAP, WebDAV, FTP/FTPS/SFTP, native HTTP/HTTPS downloads, and natural-language configuration.
 - Importable Skills, image input and annotation, Markdown/LaTeX/media rendering, device diagnostics, usage statistics, and local/WebDAV backups.
+- SVG previews in AI answers: raw inline SVG, `svg` code fences, and SVG data URLs (percent encoded or Base64), with fullscreen viewing and original `.svg` saving. Static images use AndroidSVG; SMIL and CSS animations play through an isolated WebView image renderer. SVG scripts, external resources, and interactive document events are disabled. Static AndroidSVG previews do not support filters or `foreignObject`.
 - AI charts rendered offline in answers: flowcharts, sequence diagrams, Gantt charts, line/bar/pie charts, mind maps, architecture and relationship diagrams, and electrical circuit schematics, with fullscreen viewing and PNG/SVG/source export. See [inline charts](docs/CHARTS.md).
 - Optional Shizuku and Root tools, each independently switchable.
 

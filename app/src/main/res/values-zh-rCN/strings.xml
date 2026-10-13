@@ -2410,6 +2410,7 @@ Shizuku 与 Root：不属于普通运行时权限，由用户在“系统权限�
     <string name="sponsor_save_code">保存赞赏码</string>
     <string name="sponsor_save_success">赞赏码已保存</string>
     <string name="sponsor_save_failed">无法保存赞赏码，请重试。</string>
+    <string name="ui_native_svg_rendering">消息及媒体预览中的静态 SVG 渲染</string>
 </resources>
 
 

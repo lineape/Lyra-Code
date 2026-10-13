@@ -140,6 +140,7 @@ dependencies {
     implementation(libs.jsch)
     implementation(project(":jlatexmath"))
     implementation(libs.jetbrains.markdown)
+    implementation(libs.android.svg)
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)
     implementation(libs.androidx.work.runtime.ktx)

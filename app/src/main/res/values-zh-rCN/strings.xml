@@ -2401,6 +2401,15 @@ Shizuku 与 Root：不属于普通运行时权限，由用户在“系统权限�
     <string name="mcp_local_protocol_hint">本机服务同时支持新旧版本。选择外部客户端使用的协议版本以生成连接配置。</string>
     <string name="tool_get_circuit_symbols">电路符号库</string>
     <string name="tool_get_circuit_symbols_desc">查询电路元件符号、引脚名称和坐标。</string>
+    <!-- Sponsor development -->
+    <string name="sponsor_development_title">赞助开发</string>
+    <string name="sponsor_development_desc">支持 Lyra Code 持续更新</string>
+    <string name="sponsor_thanks">感谢你对 Lyra Code 的支持。</string>
+    <string name="sponsor_code_description">Yuki Soffd 的微信赞赏码</string>
+    <string name="sponsor_scan_hint">使用微信扫一扫识别赞赏码，也可保存图片后在微信中识别。</string>
+    <string name="sponsor_save_code">保存赞赏码</string>
+    <string name="sponsor_save_success">赞赏码已保存</string>
+    <string name="sponsor_save_failed">无法保存赞赏码，请重试。</string>
 </resources>
 
 

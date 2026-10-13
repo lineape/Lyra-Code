@@ -154,6 +154,7 @@ internal fun SettingsScreen(
         "mcp_tool_detail" -> "mcp_tools"
         "github_acceleration" -> if (externalGitHubAccelerationUrl != null) gitHubAccelerationReturnDetail else "about"
         "device" -> "about"
+        "sponsor_development" -> "about"
         CompliancePageIds.INDEX -> "about"
         CompliancePageIds.USER_AGREEMENT,
         CompliancePageIds.PRIVACY_POLICY,
@@ -413,6 +414,7 @@ internal fun SettingsScreen(
                         onUpdateAvailabilityChange = onUpdateAvailabilityChange,
                         onOpenDeviceInfo = { detail = "device" },
                         onOpenServiceAgreements = { detail = CompliancePageIds.INDEX },
+                        onOpenSponsorDevelopment = { detail = "sponsor_development" },
                         onOpenGitHubAcceleration = { url ->
                             gitHubAccelerationTestUrl = url
                             detail = "github_acceleration"
@@ -422,6 +424,7 @@ internal fun SettingsScreen(
                     )
                     "github_acceleration" -> GitHubAccelerationSettingsScreen(initialTestUrl = gitHubAccelerationTestUrl)
                     "device" -> DeviceInfoScreen()
+                    "sponsor_development" -> SponsorDevelopmentScreen()
                     CompliancePageIds.INDEX -> ServiceAgreementScreen(onOpenDocument = { detail = it })
                     CompliancePageIds.USER_AGREEMENT,
                     CompliancePageIds.PRIVACY_POLICY,
@@ -684,6 +687,7 @@ internal fun settingsDetailTitle(context: Context, detail: String): String = whe
     "licenses" -> context.getString(R.string.detail_licenses)
     "about" -> context.getString(R.string.detail_about)
     "github_acceleration" -> context.getString(R.string.github_acceleration_title)
+    "sponsor_development" -> context.getString(R.string.sponsor_development_title)
     "device" -> context.getString(R.string.detail_device)
     CompliancePageIds.INDEX -> context.getString(R.string.compliance_service_agreements)
     CompliancePageIds.USER_AGREEMENT -> context.getString(R.string.compliance_user_agreement)

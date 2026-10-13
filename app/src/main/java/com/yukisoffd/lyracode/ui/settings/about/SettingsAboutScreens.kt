@@ -249,6 +249,7 @@ internal fun AboutSoftwareScreen(
     onOpenDeviceInfo: () -> Unit,
     onOpenServiceAgreements: () -> Unit,
     onOpenGitHubAcceleration: (String) -> Unit,
+    onOpenSponsorDevelopment: () -> Unit = {},
     updateInfoState: MutableState<AppUpdateInfo?> = remember { mutableStateOf(null) },
     showUpdateDialog: Boolean = true,
 ) {
@@ -572,6 +573,15 @@ internal fun AboutSoftwareScreen(
                     title = "Gitee",
                     value = "yukisoffd/lyra-code",
                     onClick = { uriHandler.openUri("https://gitee.com/yukisoffd/lyra-code") },
+                )
+            }
+            KimiSectionLabel(context.getString(R.string.sponsor_development_title))
+            KimiCardBox {
+                KimiMenuRow(
+                    Icons.Default.Favorite,
+                    context.getString(R.string.sponsor_development_title),
+                    context.getString(R.string.sponsor_development_desc),
+                    onClick = onOpenSponsorDevelopment,
                 )
             }
             KimiSectionLabel(context.getString(R.string.compliance_service_agreements))

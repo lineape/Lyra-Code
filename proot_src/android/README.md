@@ -30,7 +30,7 @@ There is no compiled package-specific or Termux fallback path. A missing loader
 produces an explicit error instead of silently attempting another package's
 private directory.
 
-## Dual-ABI build (Lyra .3)
+## Dual-ABI build (Lyra .4)
 
 From the checkout root:
 
@@ -45,7 +45,7 @@ Use a fresh build directory when changing ABIs. Both targets use API 24,
 NDK 29.0.14206865 (Clang 21), static talloc 2.5.0, `-O2`, `ARG_MAX=131072`,
 and no libandroid-shmem. The executable is PIE; the loader is freestanding,
 static, and has no Bionic dependency. NDK r29 produces 16 KB-aligned LOAD
-segments. The ARM64 loader text address is 0x2000000000; x86_64 uses
+segments. The ARM64 loader text address is 0x5400000000; x86_64 uses
 0x600000000000, matching src/arch.h. Only ARM64 generates the pokedata
 workaround offset. These packages support native 64-bit rootfs programs;
 32-bit loaders and cross-architecture CPU emulation are not bundled.
@@ -64,8 +64,30 @@ these five master commits onto main, in order:
 - `d4d2a19081c3c07f75250e4ce2980b9fa2f5720f`: recover seccomp filter flags
   when the kernel loses event messages.
 
-The Lyra external-loader lookup, API 24 baseline, static talloc and ABI-specific
-loader addresses are preserved. No app launch arguments need to change.
+The .4 build adds all nine October upstream commits to main, in order:
+
+- `a179d3e8a4e045aaa1fb8cc3284f23509d96d353`: preserve the requested access
+  mode when reopening regular files and memfds through `/proc/self/fd`.
+- `37c09de3b17e9446688a10b3de7e0fb405444c99`: move ARM64 loader, PIE and
+  interpreter mappings to 336, 340 and 356 GiB for large mmap reservations.
+- `bd6d55e122fb88708e5c445bc848a5a4bf7bc76a`: upstream contributor instructions.
+- `c1cd48d5b93166ce79098bd38256dda994653b6c`: write full 32-bit getresuid
+  and getresgid results, including Android secondary-user IDs.
+- `b5af02e7ae31e57e1d21875c0854ea645a513952`: retain readable user-namespace
+  maps and translate SO_PEERCRED for peers in other PRoot instances.
+- `7fca80c8a70be9c542bcc9adbff72f8fc3249d0c`: translate fchmodat2 paths
+  and preserve symlink-target permissions with AT_SYMLINK_NOFOLLOW.
+- `60a9c15ccd477bb80f83f4d170737dc7b8394401`: resolve AT_EMPTY_PATH at
+  AT_FDCWD against the guest cwd, including statx.
+- `254202b844c61b0ce213043b1e3c2dea38377b1d`: translate open_tree and return
+  ENOSYS for unsupported fd-based mount APIs, enabling libc fallback.
+- `b8c1f5c5c6730dc9d521d5bd5ce1cfeedecde087`: translate Unix datagram
+  destinations, preserve replies and sendmmsg lengths, and protect restarted sends.
+
+Android CMake links the external ARM64 loader at the new LOADER_ADDRESS from
+src/arch.h; the x86_64 address is unchanged. The embedded runtime version is
+`5.1.107.100-lyra.4`. The Lyra external-loader lookup, API 24 baseline and
+static talloc are preserved. No app launch arguments need to change.
 
 ## Android runtime regression checks
 
@@ -77,11 +99,32 @@ or newer (Bionic's posix_spawn helper requires API 28; PRoot still targets 24):
   -Adb G:/sdk/platform-tools/adb.exe -Serial emulator-5554
 ```
 
-The script builds three upstream helpers and a fork/thread helper for the device
+For current Android SELinux policies, use an installed debuggable Lyra APK
+containing these exact binaries and PowerShell 7:
+
+```powershell
+./android/test-runtime.ps1 -NdkPath "$env:ANDROID_HOME/ndk/29.0.14206865" `
+  -Adb "$env:ANDROID_HOME/platform-tools/adb.exe" -Serial emulator-5554 `
+  -RunAs com.yukisoffd.lyracode.debug
+```
+
+RunAs copies helpers into an isolated application directory and executes the
+installed native-library pair after verifying both SHA-256 values against dist.
+This tests the application seccomp and SELinux context; adb shell may be denied
+permission to create named Unix sockets in its temporary directory.
+
+The script builds upstream helpers and Android regression helpers for the device
 ABI, and tests the built binaries in a unique `/data/local/tmp/lyra-proot-*`
 directory. It checks simulated hard-link execution (directly, through a symlink,
 from a shell, and via execveat), O_NOFOLLOW/O_PATH descriptor names, fork, vfork,
 system, 80 concurrent posix_spawn calls across four threads, and sibling-loader
-discovery. Both seccomp modes run with a 90-second timeout. Test files remain
+discovery. It also checks full-width fake IDs, regular-file and memfd read-only
+reopens, namespace-map reads, guest-cwd empty paths and statx, cross-instance
+SO_PEERCRED, fd-mount fallback, fchmodat2 and Unix datagram sends/replies/restarts.
+The ARM64 helper additionally reserves 256, 300 and 330 GiB with mmap.
+Unavailable kernel features and denied memfd reopens are explicitly reported
+as skipped. See VALIDATION.md for the checks performed for this revision and
+the remaining architecture and host limitations.
+Both seccomp modes run with a 90-second timeout. Test files remain
 in the reported device directory for inspection. This does not simulate a
 kernel that loses ptrace event messages; that needs an affected device/kernel.

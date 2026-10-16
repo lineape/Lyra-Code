@@ -121,6 +121,7 @@ class OpenAiAgent(
         File(context.cacheDir, "http-audit"),
     )
     private val client = OkHttpClient.Builder()
+        .addInterceptor(ProviderKeyInterceptor())
         .addInterceptor(httpAudit.application)
         .addNetworkInterceptor(httpAudit.network)
         .connectTimeout(20, TimeUnit.SECONDS)

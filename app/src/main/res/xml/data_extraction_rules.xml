@@ -5,6 +5,8 @@
 -->
 <data-extraction-rules>
     <cloud-backup>
+        <exclude domain="sharedpref" path="lyra_new_api_account.xml" />
+        <exclude domain="sharedpref" path="lyra_new_api_account_fallback.xml" />
         <exclude domain="sharedpref" path="first_use_consent.xml" />
         <exclude domain="file" path="debian-runtime/" />
         <exclude domain="file" path="proot-linux/" />
@@ -14,6 +16,8 @@
         -->
     </cloud-backup>
     <device-transfer>
+        <exclude domain="sharedpref" path="lyra_new_api_account.xml" />
+        <exclude domain="sharedpref" path="lyra_new_api_account_fallback.xml" />
         <exclude domain="sharedpref" path="first_use_consent.xml" />
         <exclude domain="file" path="debian-runtime/" />
         <exclude domain="file" path="proot-linux/" />

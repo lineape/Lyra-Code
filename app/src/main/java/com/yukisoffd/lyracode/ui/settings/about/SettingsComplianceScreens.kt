@@ -148,6 +148,7 @@ private fun complianceDocument(pageId: String): ComplianceDocument = when (pageI
             ComplianceSection(R.string.compliance_user_rules_title, R.string.compliance_user_rules_body),
             ComplianceSection(R.string.compliance_user_ai_risk_title, R.string.compliance_user_ai_risk_body),
             ComplianceSection(R.string.compliance_user_third_party_title, R.string.compliance_user_third_party_body),
+            ComplianceSection(R.string.new_api_account, R.string.new_api_account_data),
             ComplianceSection(R.string.compliance_user_disclaimer_title, R.string.compliance_user_disclaimer_body),
             ComplianceSection(R.string.compliance_user_device_title, R.string.compliance_user_device_body),
             ComplianceSection(R.string.compliance_user_contact_title, R.string.compliance_user_contact_body),
@@ -161,6 +162,7 @@ private fun complianceDocument(pageId: String): ComplianceDocument = when (pageI
             ComplianceSection(R.string.compliance_privacy_principles_title, R.string.compliance_privacy_principles_body),
             ComplianceSection(R.string.compliance_privacy_process_title, R.string.compliance_privacy_process_body),
             ComplianceSection(R.string.compliance_privacy_external_title, R.string.compliance_privacy_external_body),
+            ComplianceSection(R.string.new_api_account, R.string.new_api_account_data),
             ComplianceSection(R.string.compliance_privacy_storage_title, R.string.compliance_privacy_storage_body),
             ComplianceSection(R.string.compliance_privacy_security_title, R.string.compliance_privacy_security_body),
             ComplianceSection(R.string.compliance_privacy_device_title, R.string.compliance_privacy_device_body),
@@ -175,6 +177,7 @@ private fun complianceDocument(pageId: String): ComplianceDocument = when (pageI
         summary = R.string.compliance_personal_summary,
         sections = listOf(
             ComplianceSection(R.string.compliance_personal_optional_profile_title, R.string.compliance_personal_optional_profile_body),
+            ComplianceSection(R.string.new_api_account, R.string.new_api_account_data),
             ComplianceSection(R.string.compliance_personal_chat_title, R.string.compliance_personal_chat_body),
             ComplianceSection(R.string.compliance_personal_credentials_title, R.string.compliance_personal_credentials_body),
             ComplianceSection(R.string.compliance_personal_files_title, R.string.compliance_personal_files_body),
@@ -192,6 +195,7 @@ private fun complianceDocument(pageId: String): ComplianceDocument = when (pageI
         sections = listOf(
             ComplianceSection(R.string.compliance_third_sdk_title, R.string.compliance_third_sdk_body),
             ComplianceSection(R.string.compliance_third_models_title, R.string.compliance_third_models_body),
+            ComplianceSection(R.string.new_api_account, R.string.new_api_account_data),
             ComplianceSection(R.string.compliance_third_web_title, R.string.compliance_third_web_body),
             ComplianceSection(R.string.compliance_third_mcp_title, R.string.compliance_third_mcp_body),
             ComplianceSection(R.string.compliance_third_remote_title, R.string.compliance_third_remote_body),

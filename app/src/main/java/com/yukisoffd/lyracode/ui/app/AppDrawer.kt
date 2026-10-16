@@ -107,6 +107,7 @@ internal fun KimiDrawerContent(
     avatarPath: String?,
     keyboardAvoidanceOffsetPx: Int,
     onProfileChanged: (String, String?) -> Unit,
+    onOpenAccount: (String) -> Unit,
     onSelectPage: (Int) -> Unit,
     onNewConversation: () -> Unit,
     onCreateProject: () -> Unit,
@@ -246,6 +247,8 @@ internal fun KimiDrawerContent(
     if (editingProfile) {
         ProfileEditDialog(
             settings = settings,
+            onServicesChanged = controller::reloadProfiles,
+            onOpenAccount = { notice -> editingProfile = false; onOpenAccount(notice) },
             nickname = nickname,
             avatarPath = avatarPath,
             onDismiss = { editingProfile = false },

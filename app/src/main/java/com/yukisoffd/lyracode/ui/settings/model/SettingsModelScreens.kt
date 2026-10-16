@@ -107,7 +107,7 @@ import kotlin.math.max
 
 
 @Composable
-internal fun ProfileSettingsSummary(settings: AppSettings) {
+internal fun ProfileSettingsSummary(settings: AppSettings, onServicesChanged: () -> Unit, onOpenAccount: (String) -> Unit) {
     KimiCardBox {
         Row(verticalAlignment = Alignment.CenterVertically) {
             UserAvatar(settings.userAvatarPath, settings.userNickname.take(1).ifBlank { "L" }, Modifier.size(56.dp))
@@ -118,6 +118,8 @@ internal fun ProfileSettingsSummary(settings: AppSettings) {
             }
         }
     }
+    KimiSectionLabel(uiText(R.string.mengxi_third_party_accounts))
+    KimiCardBox { NewApiAccountSection(settings, onServicesChanged, onOpenAccount) }
 }
 
 @Composable
@@ -694,6 +696,7 @@ internal fun ModelServiceSettings(
     var requestOverrides by remember(editKey) { mutableStateOf(current?.modelRequestOverrides.orEmpty()) }
     var name by remember(editKey) { mutableStateOf(current?.name.orEmpty()) }
     var key by remember(editKey) { mutableStateOf(current?.apiKey.orEmpty()) }
+    var secondaryKeys by remember(editKey) { mutableStateOf(current?.secondaryApiKeys.orEmpty()) }
     var baseUrl by remember(editKey) { mutableStateOf(current?.baseUrl.orEmpty()) }
     var apiFormat by remember(editKey) { mutableStateOf(current?.apiFormat ?: ApiProfile.API_FORMAT_OPENAI) }
     var chatPath by remember(editKey) { mutableStateOf(current?.chatPath ?: ApiProfile.defaultChatPath(apiFormat)) }
@@ -751,7 +754,8 @@ internal fun ModelServiceSettings(
             presetId = current?.presetId.orEmpty(),
             presetPlanId = current?.presetPlanId.orEmpty(),
             name = name.ifBlank { uiText(R.string.label_unnamed_platform) },
-            apiKey = key,
+            apiKey = (listOf(key) + secondaryKeys).map(String::trim).firstOrNull(String::isNotBlank).orEmpty(),
+            secondaryApiKeys = (listOf(key) + secondaryKeys).map(String::trim).filter(String::isNotBlank).distinct().drop(1),
             baseUrl = baseUrl.ifBlank { defaultBaseUrlForApiFormat(apiFormat) },
             chatPath = ApiProfile.normalizedChatPath(apiFormat, chatPath),
             apiFormat = apiFormat,
@@ -1045,7 +1049,7 @@ internal fun ModelServiceSettings(
                         }
                     }
                     OutlinedTextField(value = name, onValueChange = { name = it }, modifier = Modifier.fillMaxWidth(), label = { Text(uiText(R.string.label_service_name)) }, singleLine = true)
-                    OutlinedTextField(value = key, onValueChange = { key = it }, modifier = Modifier.fillMaxWidth(), label = { Text(apiKeyLabel(apiFormat)) }, supportingText = { Text(uiText(R.string.api_key_optional_hint)) }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                    ProviderKeysEditor(key, secondaryKeys) { primary, secondary -> key = primary; secondaryKeys = secondary }
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()

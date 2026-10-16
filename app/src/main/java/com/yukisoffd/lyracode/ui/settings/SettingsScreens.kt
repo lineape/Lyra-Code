@@ -36,6 +36,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -118,6 +119,8 @@ internal fun SettingsScreen(
     updateAvailable: Boolean,
     onUpdateAvailabilityChange: (Boolean) -> Unit,
     settingsBackRequest: Int,
+    externalAccountNotice: String?,
+    onExternalAccountOpened: () -> Unit,
     externalGitHubAccelerationUrl: String?,
     onExternalGitHubAccelerationClosed: () -> Unit,
     onDetailTitleChange: (String?) -> Unit,
@@ -127,6 +130,9 @@ internal fun SettingsScreen(
 ) {
     var showUnsupportedDevice by rememberSaveable { mutableStateOf(false) }
     var detail by rememberSaveable { mutableStateOf<String?>(null) }
+    var accountNotice by rememberSaveable { mutableStateOf("") }
+    var accountPageVersion by rememberSaveable { mutableIntStateOf(0) }
+    var handledBackRequest by remember { mutableIntStateOf(settingsBackRequest) }
     var mcpToolServerId by rememberSaveable { mutableStateOf("") }
     var mcpToolName by rememberSaveable { mutableStateOf("") }
     var gitHubAccelerationTestUrl by rememberSaveable { mutableStateOf(GITHUB_CONNECTIVITY_TEST_URL) }
@@ -150,6 +156,7 @@ internal fun SettingsScreen(
         )
     }
     fun previousDetail(current: String?): String? = when (current) {
+        "mengxi_account" -> "profile"
         "mcp_tools" -> "mcp"
         "mcp_tool_detail" -> "mcp_tools"
         "github_acceleration" -> if (externalGitHubAccelerationUrl != null) gitHubAccelerationReturnDetail else "about"
@@ -192,6 +199,14 @@ internal fun SettingsScreen(
             detail = "github_acceleration"
         }
     }
+    LaunchedEffect(externalAccountNotice) {
+        if (externalAccountNotice != null) {
+            accountNotice = externalAccountNotice
+            accountPageVersion++
+            detail = "mengxi_account"
+            onExternalAccountOpened()
+        }
+    }
     val predictiveBackState = rememberPredictiveBackGestureState(
         enabled = predictiveBackEnabled && detail != null,
         onBack = {
@@ -206,7 +221,9 @@ internal fun SettingsScreen(
         skipNextTransition = false
     }
     LaunchedEffect(settingsBackRequest) {
-        if (settingsBackRequest > 0 && detail != null) navigateBackFromDetail()
+        val hasNewBackRequest = settingsBackRequest > handledBackRequest
+        handledBackRequest = settingsBackRequest
+        if (hasNewBackRequest && detail != null) navigateBackFromDetail()
     }
     MaterialTheme(
         colorScheme = MaterialTheme.colorScheme,
@@ -271,7 +288,17 @@ internal fun SettingsScreen(
                     scroll = target !in setOf("model", "prompts", "memories", "licenses", "about", "device", "font", "font_library", "github_acceleration"),
                 ) {
                     when (target) {
-                    "profile" -> ProfileSettingsSummary(settings)
+                    "profile" -> ProfileSettingsSummary(settings, controller::reloadProfiles) { notice ->
+                        accountNotice = notice
+                        accountPageVersion++
+                        detail = "mengxi_account"
+                    }
+                    "mengxi_account" -> key(accountPageVersion) {
+                        MengxiAccountPage(settings, accountNotice, controller::reloadProfiles) {
+                            accountNotice = ""
+                            detail = "profile"
+                        }
+                    }
                     "model" -> ModelServiceSettings(
                         settings = settings,
                         controller = controller,
@@ -574,6 +601,7 @@ internal fun SettingsScreen(
                         EnterTransition.None togetherWith ExitTransition.None
                     } else {
                         val forward = when {
+                            initialState == "mengxi_account" && targetState == "profile" -> false
                             initialState == "github_acceleration" -> false
                             initialState == "device" && targetState == "about" -> false
                             initialState == "about" && targetState == "device" -> true
@@ -638,6 +666,7 @@ internal fun SettingsDetailPage(
 
 internal fun settingsDetailTitle(context: Context, detail: String): String = when (detail) {
     "profile" -> context.getString(R.string.detail_profile)
+    "mengxi_account" -> context.getString(R.string.new_api_account)
     "model" -> context.getString(R.string.detail_model)
     "topic_summary_model" -> context.getString(R.string.detail_topic_summary_model)
     "topic_summary_model_topic" -> uiText(R.string.ui_topic_summary_model)

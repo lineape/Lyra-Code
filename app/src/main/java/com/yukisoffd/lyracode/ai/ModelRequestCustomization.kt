@@ -105,7 +105,7 @@ internal fun customizedModelBody(source: JSONObject, config: ModelRequestCustomi
 }
 
 internal fun Request.customizedFor(profile: ApiProfile, model: String, pureMode: Boolean = false): Request {
-    val tagged = newBuilder().tag(ModelAuditTag::class.java, ModelAuditTag(profile.id, model)).build()
+    val tagged = newBuilder().tag(ModelAuditTag::class.java, ModelAuditTag(profile.id, model)).build().withProviderKeys(profile)
     val buffer = Buffer()
     body?.writeTo(buffer) ?: return tagged
     val original = runCatching { JSONObject(buffer.readUtf8()) }.getOrNull() ?: return tagged

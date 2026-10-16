@@ -206,6 +206,7 @@ internal fun LyraCodeApp(
     val skills = remember(skillsRevision, appSettingsRevision) { settings.installedSkills() }
     var settingsDetailTitle by rememberSaveable { mutableStateOf<String?>(null) }
     var settingsBackRequest by remember { mutableIntStateOf(0) }
+    var externalAccountNotice by rememberSaveable { mutableStateOf<String?>(null) }
     var conversationDetailsExpanded by rememberSaveable { mutableStateOf(false) }
     var showStatsAboutDialog by rememberSaveable { mutableStateOf(false) }
     var skipNextPageTransition by remember { mutableStateOf(false) }
@@ -502,6 +503,13 @@ internal fun LyraCodeApp(
                             nickname = newNickname
                             avatarPath = newAvatarPath
                         },
+                        onOpenAccount = { notice ->
+                            scope.launch {
+                                drawerState.close()
+                                externalAccountNotice = notice
+                                selectedPage = PAGE_SETTINGS
+                            }
+                        },
                         onSelectPage = { index ->
                             if (index == PAGE_FILES) {
                                 scope.launch {
@@ -664,6 +672,8 @@ internal fun LyraCodeApp(
                             updateAvailable = aboutUpdateAvailable,
                             onUpdateAvailabilityChange = { aboutUpdateAvailable = it },
                             settingsBackRequest = settingsBackRequest,
+                            externalAccountNotice = externalAccountNotice,
+                            onExternalAccountOpened = { externalAccountNotice = null },
                             externalGitHubAccelerationUrl = startupAccelerationUrl,
                             onExternalGitHubAccelerationClosed = {
                                 selectedPage = startupAccelerationReturnPage

@@ -35,7 +35,7 @@ class DeviceAgentSessionTest {
         val provider = start()
         val definitions = provider.definitions()
         val names = (0 until definitions.length()).map { definitions.getJSONObject(it).getJSONObject("function").getString("name") }
-        assertEquals(setOf("device_observe", "device_activate", "device_scroll", "device_set_text", "device_wait_for_change", "device_finish"), names.toSet())
+        assertEquals(setOf("device_get_capabilities", "device_observe", "device_activate", "device_scroll", "device_set_text", "device_wait_for_change", "device_finish"), names.toSet())
         assertFalse(definitions.toString().contains("coordinate"))
         assertFalse(definitions.toString().contains("run_command"))
     }

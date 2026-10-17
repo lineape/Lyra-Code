@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="provider_primary_key">Primary API Key</string>
+    <string name="provider_secondary_key">Secondary API Key %1$d</string>
+    <string name="provider_make_primary">Make primary</string>
+    <string name="provider_remove_key">Remove key</string>
+    <string name="provider_add_secondary">Add secondary Key</string>
+    <string name="provider_keys_hint">The primary Key is tried first. On HTTP 401, 402, 403 or 429, secondary Keys are tried in order. Keys are included only in backups with secrets enabled.</string>
+    <string name="new_api_account">梦汐 API account</string>
+    <string name="new_api_privacy">Login is optional. This account is provided by api.huanyan.fun and only syncs platform user information, API Keys and available models. Local conversations and other settings stay on this device and are not uploaded by account sync. Signing in and using its model service are subject to the platform terms and privacy policy; model requests are sent to that platform.</string>
+    <string name="new_api_view_account">View platform account</string>
+    <string name="new_api_sign_in_register">Sign in / Register</string>
+    <string name="new_api_login">Sign in</string>
+    <string name="new_api_register">Register and sign in</string>
+    <string name="new_api_create_account">Create an account in this app</string>
+    <string name="new_api_back_to_login">Back to sign in</string>
+    <string name="new_api_username">Username</string>
+    <string name="new_api_password">Password</string>
+    <string name="new_api_email">Email (any domain)</string>
+    <string name="new_api_code">Verification code</string>
+    <string name="new_api_send_code">Send email code</string>
+    <string name="new_api_invitation">Invitation code (optional)</string>
+    <string name="new_api_2fa_hint">Enter the six-digit code from your authenticator to finish signing in.</string>
+    <string name="new_api_code_sent">Code sent. Check your email.</string>
+    <string name="new_api_registered">Registration succeeded. Sign in with your new account.</string>
+    <string name="new_api_synced">Platform information, API Keys and models have been synced.</string>
+    <string name="new_api_partial_sync">Signed in. Service synchronization is incomplete; use Sync Keys and models to retry.</string>
+    <string name="new_api_sync">Sync Keys and models</string>
+    <string name="new_api_refresh_user">Refresh user information</string>
+    <string name="new_api_logout">Sign out of platform account</string>
+    <string name="new_api_logout_hint">Signing out clears the local account session. Model services and their Keys remain on this device; remove them in Model services if needed.</string>
+    <string name="new_api_signed_out">Signed out.</string>
+    <string name="new_api_request_failed">The platform request failed. Try again.</string>
+    <string name="new_api_user_id">User ID</string>
+    <string name="new_api_display_name">Display name</string>
+    <string name="new_api_group">User group</string>
+    <string name="new_api_quota">Remaining quota</string>
+    <string name="new_api_used_quota">Used quota</string>
+    <string name="new_api_request_count">Request count</string>
+    <string name="new_api_quota_hint">Platform quota unit: 500,000 = 1 梦汐币. New app Keys use unlimited quota, no model restriction and the automatic group. Unlimited Key quota does not increase the account balance.</string>
+    <string name="new_api_close">Close</string>
+    <string name="new_api_account_data">梦汐 API accounts are optional and provided by api.huanyan.fun. Only when you register, sign in, sign out, refresh or sync does the app contact that platform, sending the username, password, email, verification code, optional invitation code, account access token or refresh cookie required by the selected operation. Passwords are not saved. User information, session cookies and API Keys are stored locally; account sessions are excluded from app backups and Android backup/transfer. Primary and secondary model Keys are exported only when you enable secrets in a backup. Account sync never uploads local conversations, attachments or other settings. When you use this model service, the model request content is sent directly to the platform under its own agreement and privacy policy. Signing out clears the local account session and attempts to revoke that session; model services and Keys remain until you remove them.</string>
+    <string name="new_api_email_address">Email</string>
+    <string name="new_api_user_refreshed">User information refreshed.</string>
+    <string name="mengxi_platform_name">梦汐 API</string>
+    <string name="mengxi_third_party_accounts">Third-party accounts</string>
+    <string name="mengxi_not_signed_in">Not signed in</string>
+    <string name="mengxi_connected">Connected</string>
+    <string name="mengxi_user_details">Account information</string>
+    <string name="mengxi_quota_units">%1$s quota · 500,000 = 1 梦汐币</string>
+    <string name="mengxi_keys_count">%1$d API Keys</string>
+    <string name="mengxi_open_website">Visit 梦汐 API website</string>
+    <string name="mengxi_coin_amount">%1$s 梦汐币</string>
+    <string name="provider_hold_to_reveal_key">Hold to show this API Key; release to hide</string>
+</resources>

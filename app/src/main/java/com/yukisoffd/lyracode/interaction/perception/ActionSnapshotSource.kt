@@ -36,6 +36,7 @@ internal class ActionSnapshotSource(
     }
 
     private fun captureInternal(): SnapshotCaptureResult {
+        val fullAccess = com.yukisoffd.lyracode.interaction.DeviceFullAccess.isEnabled(context)
         val root = activeRoot()
             ?: return SnapshotCaptureResult.Failure(ScreenProbeFailureCode.NO_ROOT_NODES)
         val packageName = root.packageName?.toString()
@@ -64,7 +65,7 @@ internal class ActionSnapshotSource(
                 (node.isEditable && TextInputPolicy.isSensitive(node.inputType, node.hintText?.toString(),
                     node.contentDescription?.toString(), node.viewIdResourceName?.substringAfterLast('/')))
             val nodePackage = node.packageName?.toString() ?: packageName
-            val redacted = password || sensitive || nodePackage == SYSTEM_UI_PACKAGE
+            val redacted = !fullAccess && (password || sensitive || nodePackage == SYSTEM_UI_PACKAGE)
             val rawText = if (redacted) null else node.text?.toString()
             val rawDescription = if (redacted) null else node.contentDescription?.toString()
             val hasContext = visible && (!rawText.isNullOrBlank() || !rawDescription.isNullOrBlank())

@@ -890,64 +890,14 @@ class AppSettings(context: Context) {
         if (raw.isNullOrBlank()) return listOf(defaultProfile())
         return runCatching {
             val array = JSONArray(raw)
-            buildList {
-                for (index in 0 until array.length()) {
-                    val item = array.getJSONObject(index)
-                    val models = item.optJSONArray("savedModels") ?: JSONArray()
-                    val savedModels = buildList {
-                        for (modelIndex in 0 until models.length()) add(models.getString(modelIndex))
-                    }.filter { it.isNotBlank() }.distinct()
-                    val enabledModels = if (item.has("enabledModels")) {
-                        val enabled = item.optJSONArray("enabledModels") ?: JSONArray()
-                        buildList {
-                            for (modelIndex in 0 until enabled.length()) add(enabled.optString(modelIndex))
-                        }.filter { it.isNotBlank() }.distinct()
-                    } else {
-                        savedModels
-                    }
-                    val apiFormat = item.optString("apiFormat").ifBlank { ApiProfile.API_FORMAT_OPENAI }
-                    add(
-                        ApiProfile(
-                            id = item.optString("id").ifBlank { newId() },
-                            presetId = item.optString("presetId"),
-                            presetPlanId = item.optString("presetPlanId"),
-                            name = item.optString("name").ifBlank { "OpenAI" },
-                            apiKey = item.optString("apiKey"),
-                            baseUrl = item.optString("baseUrl").ifBlank { DEFAULT_BASE_URL },
-                            chatPath = ApiProfile.normalizedChatPath(apiFormat, item.optString("chatPath")),
-                            apiFormat = apiFormat,
-                            selectedModel = item.optString("selectedModel").ifBlank { DEFAULT_MODEL },
-                            savedModels = savedModels,
-                            enabledModels = enabledModels,
-                            useResponsesApi = apiFormat == ApiProfile.API_FORMAT_OPENAI && item.optBoolean("useResponsesApi", false),
-                    modelRequestOverrides = ModelRequestCustomization.decodeMap(item.optJSONObject("modelRequestOverrides")),
-                        ),
-                    )
-                }
+            (0 until array.length()).map {
+                ApiProfileJson.decode(array.getJSONObject(it), DEFAULT_BASE_URL, DEFAULT_MODEL, "OpenAI")
             }.ifEmpty { listOf(defaultProfile()) }
         }.getOrDefault(listOf(defaultProfile()))
     }
 
     fun saveProfiles(profiles: List<ApiProfile>, selectedProfileId: String? = null) {
-        val array = JSONArray()
-        profiles.forEach { profile ->
-            array.put(
-                JSONObject()
-                    .put("id", profile.id)
-                    .put("presetId", profile.presetId)
-                    .put("presetPlanId", profile.presetPlanId)
-                    .put("name", profile.name)
-                    .put("apiKey", profile.apiKey)
-                    .put("baseUrl", profile.baseUrl)
-                    .put("chatPath", ApiProfile.normalizedChatPath(profile.apiFormat, profile.chatPath))
-                    .put("apiFormat", profile.apiFormat)
-                    .put("selectedModel", profile.selectedModel)
-                    .put("savedModels", JSONArray(profile.savedModels.distinct()))
-                    .put("enabledModels", JSONArray(profile.enabledModels.distinct()))
-                    .put("useResponsesApi", profile.apiFormat == ApiProfile.API_FORMAT_OPENAI && profile.useResponsesApi)
-                    .put("modelRequestOverrides", ModelRequestCustomization.encodeMap(profile.modelRequestOverrides))
-            )
-        }
+        val array = JSONArray().apply { profiles.forEach { put(ApiProfileJson.encode(it)) } }
         securePrefs.edit().putString(KEY_API_PROFILES, array.toString()).apply()
         selectedProfileId?.let { selectedApiProfileId = it }
         profiles.firstOrNull { it.id == selectedApiProfileId }?.let {
@@ -955,6 +905,16 @@ class AppSettings(context: Context) {
             apiEndpoint = it.chatEndpoint
             model = it.selectedModel
         }
+    }
+
+    // Account sessions are device-local and deliberately excluded from all exports/backups.
+    internal val newApiAccount: NewApiAccountClient by lazy {
+        val accountPrefs = createSecurePrefs("lyra_new_api_account")
+        NewApiAccountClient(object : NewApiAccountStore {
+            override var state: String
+                get() = accountPrefs.getString("session", "").orEmpty()
+                set(value) { check(accountPrefs.edit().putString("session", value).commit()) { "Unable to save account session" } }
+        })
     }
 
     var selectedApiProfileId: String
@@ -1563,23 +1523,7 @@ class AppSettings(context: Context) {
                 }
             })
             .put("profiles", JSONArray().also { array ->
-                profiles().forEach { profile ->
-                    array.put(
-                        JSONObject()
-                            .put("id", profile.id)
-                            .put("presetId", profile.presetId)
-                            .put("presetPlanId", profile.presetPlanId)
-                            .put("name", profile.name)
-                            .put("apiKey", if (includeSecrets) profile.apiKey else "")
-                            .put("baseUrl", profile.baseUrl)
-                            .put("apiFormat", profile.apiFormat)
-                            .put("selectedModel", profile.selectedModel)
-                            .put("savedModels", JSONArray(profile.savedModels))
-                            .put("enabledModels", JSONArray(profile.enabledModels))
-                            .put("useResponsesApi", profile.apiFormat == ApiProfile.API_FORMAT_OPENAI && profile.useResponsesApi)
-                    .put("modelRequestOverrides", ModelRequestCustomization.encodeMap(profile.modelRequestOverrides))
-                    )
-                }
+                profiles().forEach { array.put(ApiProfileJson.encode(it, includeSecrets)) }
             })
             .put("mcpServers", JSONArray().also { array ->
                 mcpServers().forEach { server ->
@@ -2027,32 +1971,7 @@ class AppSettings(context: Context) {
     private fun parseProfiles(array: JSONArray): List<ApiProfile> = buildList {
         for (index in 0 until array.length()) {
             val item = array.optJSONObject(index) ?: continue
-            val models = item.optJSONArray("savedModels") ?: JSONArray()
-            val savedModels = buildList { for (i in 0 until models.length()) add(models.optString(i)) }.filter { it.isNotBlank() }.distinct()
-            val enabledModels = if (item.has("enabledModels")) {
-                val enabled = item.optJSONArray("enabledModels") ?: JSONArray()
-                buildList { for (i in 0 until enabled.length()) add(enabled.optString(i)) }.filter { it.isNotBlank() }.distinct()
-            } else {
-                savedModels
-            }
-            val apiFormat = item.optString("apiFormat").ifBlank { ApiProfile.API_FORMAT_OPENAI }
-            add(
-                ApiProfile(
-                    id = item.optString("id").ifBlank { newId() },
-                    presetId = item.optString("presetId"),
-                    presetPlanId = item.optString("presetPlanId"),
-                    name = item.optString("name").ifBlank { "API" },
-                    apiKey = item.optString("apiKey"),
-                    baseUrl = item.optString("baseUrl").ifBlank { DEFAULT_BASE_URL },
-                    chatPath = ApiProfile.normalizedChatPath(apiFormat, item.optString("chatPath")),
-                    apiFormat = apiFormat,
-                    selectedModel = item.optString("selectedModel").ifBlank { DEFAULT_MODEL },
-                    savedModels = savedModels,
-                    enabledModels = enabledModels,
-                    useResponsesApi = apiFormat == ApiProfile.API_FORMAT_OPENAI && item.optBoolean("useResponsesApi", false),
-                    modelRequestOverrides = ModelRequestCustomization.decodeMap(item.optJSONObject("modelRequestOverrides")),
-                ),
-            )
+            add(ApiProfileJson.decode(item, DEFAULT_BASE_URL, DEFAULT_MODEL))
         }
     }
 
@@ -2214,12 +2133,7 @@ class AppSettings(context: Context) {
             val index = result.indexOfFirst { it.id == incoming.id || sameEndpointProfile(it, incoming) }
             if (index >= 0) {
                 val current = result[index]
-                result[index] = incoming.copy(
-                    id = current.id,
-                    apiKey = incoming.apiKey.ifBlank { current.apiKey },
-                    savedModels = (incoming.savedModels + current.savedModels).filter { it.isNotBlank() }.distinct(),
-                    enabledModels = (incoming.enabledModels + current.enabledModels).filter { it.isNotBlank() }.distinct(),
-                )
+                result[index] = ApiProfileJson.merge(current, incoming)
             } else {
                 result += incoming
             }
@@ -2346,20 +2260,20 @@ class AppSettings(context: Context) {
     }
 
     @Suppress("DEPRECATION")
-    private fun createSecurePrefs(): SharedPreferences {
+    private fun createSecurePrefs(name: String = "lyra_secure_settings"): SharedPreferences {
         return runCatching {
             val key = MasterKey.Builder(appContext)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                 .build()
             EncryptedSharedPreferences.create(
                 appContext,
-                "lyra_secure_settings",
+                name,
                 key,
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
             )
         }.getOrElse {
-            appContext.getSharedPreferences("lyra_secure_settings_fallback", Context.MODE_PRIVATE)
+            appContext.getSharedPreferences("${name}_fallback", Context.MODE_PRIVATE)
         }
     }
 

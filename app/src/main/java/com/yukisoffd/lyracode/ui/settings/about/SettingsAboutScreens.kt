@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.verticalScroll
@@ -254,6 +255,7 @@ internal fun AboutSoftwareScreen(
     onOpenSponsorDevelopment: () -> Unit = {},
     updateInfoState: MutableState<AppUpdateInfo?> = remember { mutableStateOf(null) },
     showUpdateDialog: Boolean = true,
+    scrollState: ScrollState = rememberScrollState(),
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
@@ -493,7 +495,7 @@ internal fun AboutSoftwareScreen(
         Column(
             Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             AboutLogoHeader()

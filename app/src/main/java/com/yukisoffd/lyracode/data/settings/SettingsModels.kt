@@ -16,7 +16,11 @@ data class ApiProfile(
     val presetId: String = "",
     val presetPlanId: String = "",
     val modelRequestOverrides: Map<String, ModelRequestCustomization> = emptyMap(),
+    val secondaryApiKeys: List<String> = emptyList(),
 ) {
+    val allApiKeys: List<String>
+        get() = (listOf(apiKey) + secondaryApiKeys).map(String::trim).filter(String::isNotBlank).distinct()
+
     val chatEndpoint: String
         get() = "${baseUrl.trimEnd('/')}${normalizedChatPath(apiFormat, chatPath)}"
 

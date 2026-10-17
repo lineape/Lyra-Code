@@ -6,11 +6,11 @@ import com.yukisoffd.lyracode.interaction.policy.DevicePolicyDecision
 import com.yukisoffd.lyracode.interaction.policy.TextInputPolicy
 
 internal object TextActionVerifier {
-    fun verify(selection: ManualActionSelection, before: ScreenSnapshot, after: ScreenSnapshot): DeviceActionStatus {
+    fun verify(selection: ManualActionSelection, before: ScreenSnapshot, after: ScreenSnapshot, fullAccess: Boolean = false): DeviceActionStatus {
         if (after.activePackage != selection.expectedPackage) return DeviceActionStatus.PACKAGE_CHANGED
         if (before.display != after.display) return DeviceActionStatus.STALE
         val expected = before.nodes.singleOrNull { it.handle == selection.elementHandle } ?: return DeviceActionStatus.STALE
-        val text = selection.inputText?.takeIf(TextInputPolicy::isValidText) ?: return DeviceActionStatus.BLOCKED
+        val text = selection.inputText?.takeIf { TextInputPolicy.isValidText(it, fullAccess) } ?: return DeviceActionStatus.BLOCKED
         val candidates = after.nodes.filter {
             it.windowId == expected.windowId && it.packageName == selection.expectedPackage &&
                 it.className == expected.className &&
@@ -18,7 +18,7 @@ internal object TextActionVerifier {
         }
         if (candidates.isEmpty()) return DeviceActionStatus.STALE
         val actual = candidates.singleOrNull() ?: return DeviceActionStatus.AMBIGUOUS
-        if (DeviceActionPolicy.evaluate(selection.expectedPackage, actual, ManualDeviceAction.SET_TEXT) !is DevicePolicyDecision.Allowed)
+        if (DeviceActionPolicy.evaluate(selection.expectedPackage, actual, ManualDeviceAction.SET_TEXT, fullAccess = fullAccess) !is DevicePolicyDecision.Allowed)
             return DeviceActionStatus.BLOCKED
         return if (actual.textFingerprint == TextInputPolicy.fingerprint(text)) DeviceActionStatus.SUCCEEDED
             else DeviceActionStatus.TEXT_MISMATCH

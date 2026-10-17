@@ -7,7 +7,9 @@ import java.security.MessageDigest
 internal object TextInputPolicy {
     const val MAX_TEXT_LENGTH = 500
 
-    fun isValidText(text: String?): Boolean = text != null && text.isNotEmpty() &&
+    fun isValidText(text: String?, fullAccess: Boolean = false): Boolean = if (fullAccess) {
+        text != null && text.length <= 16_000
+    } else text != null && text.isNotEmpty() &&
         text.length <= MAX_TEXT_LENGTH && text.none {
             (it.isISOControl() && it != '\n' && it != '\t') ||
                 it in '\u202a'..'\u202e' || it in '\u2066'..'\u2069'

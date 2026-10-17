@@ -22,20 +22,23 @@ internal sealed interface NodeResolution {
 /** Re-resolves an immutable semantic target immediately before one native node action. */
 internal class SemanticNodeResolver(
     private val rootsProvider: () -> List<AccessibilityNodeInfo>,
+    private val fullAccessEnabled: () -> Boolean,
 ) {
+    constructor(rootsProvider: () -> List<AccessibilityNodeInfo>) : this(rootsProvider, { false })
     constructor(service: AccessibilityService) : this({
         listOfNotNull(service.rootInActiveWindow).ifEmpty {
             service.windows.orEmpty()
                 .filter { it.type != android.view.accessibility.AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY }
                 .mapNotNull { window -> kotlin.runCatching { window.root }.getOrNull() }
         }
-    })
+    }, { com.yukisoffd.lyracode.interaction.DeviceFullAccess.isEnabled(service) })
     fun resolve(
         expected: SemanticNode,
         expectedPackage: String,
         action: ManualDeviceAction,
         preferredRoot: AccessibilityNodeInfo? = null,
     ): NodeResolution {
+        val fullAccess = fullAccessEnabled()
         val candidates = mutableListOf<Candidate>()
         val roots = if (preferredRoot != null) {
             listOf(preferredRoot)
@@ -50,7 +53,7 @@ internal class SemanticNodeResolver(
                         .getOrDefault(emptySequence())
                 }
                 .take(MAX_DIRECT_CANDIDATES)
-                .mapNotNull { candidate(it, expected, expectedPackage, action) }
+                .mapNotNull { candidate(it, expected, expectedPackage, action, fullAccess) }
                 .toList()
             val directResolution = rank(directCandidates)
             if (directResolution !is NodeResolution.NotFound) return directResolution
@@ -65,7 +68,7 @@ internal class SemanticNodeResolver(
                         .getOrDefault(emptySequence())
                 }
                 .take(MAX_DIRECT_CANDIDATES)
-                .mapNotNull { candidate(it, expected, expectedPackage, action) }
+                .mapNotNull { candidate(it, expected, expectedPackage, action, fullAccess) }
                 .toList()
             val directResolution = rank(directCandidates)
             if (directResolution !is NodeResolution.NotFound) return directResolution
@@ -83,7 +86,7 @@ internal class SemanticNodeResolver(
             val frame = queue.removeFirst()
             val node = frame.node
             visited++
-            if (frame.depth <= MAX_DEPTH) candidate(node, expected, expectedPackage, action)?.let(candidates::add)
+            if (frame.depth <= MAX_DEPTH) candidate(node, expected, expectedPackage, action, fullAccess)?.let(candidates::add)
             if (frame.depth < MAX_DEPTH) {
                 for (index in 0 until node.childCount.coerceAtMost(MAX_CHILDREN)) {
                     runCatching { node.getChild(index) }.getOrNull()?.let {
@@ -101,10 +104,11 @@ internal class SemanticNodeResolver(
         expected: SemanticNode,
         expectedPackage: String,
         action: ManualDeviceAction,
+        fullAccess: Boolean,
     ): Candidate? {
         if (node.packageName?.toString() != expectedPackage) return null
         if (node.windowId != expected.windowId) return null
-        if (node.isPassword || (android.os.Build.VERSION.SDK_INT >= 34 && node.isAccessibilityDataSensitive)) return null
+        if (!fullAccess && (node.isPassword || (android.os.Build.VERSION.SDK_INT >= 34 && node.isAccessibilityDataSensitive))) return null
         if (action == ManualDeviceAction.SET_TEXT) {
             if (expected.textFingerprint == null || expected.textFingerprint !=
                 com.yukisoffd.lyracode.interaction.policy.TextInputPolicy.fingerprint(node.text)) return null
@@ -114,7 +118,7 @@ internal class SemanticNodeResolver(
         if (expected.resourceId != null && node.viewIdResourceName != expected.resourceId) return null
         if (com.yukisoffd.lyracode.interaction.policy.DeviceActionPolicy.evaluate(expectedPackage,
                 expected.copy(text = node.text?.toString(), contentDescription = node.contentDescription?.toString(),
-                    hintText = node.hintText?.toString(), inputType = node.inputType, editable = node.isEditable), action)
+                    hintText = node.hintText?.toString(), inputType = node.inputType, editable = node.isEditable), action, fullAccess = fullAccess)
             !is com.yukisoffd.lyracode.interaction.policy.DevicePolicyDecision.Allowed) return null
         if (!runCatching { node.isEnabled }.getOrDefault(false)) return null
         if (!runCatching { node.isVisibleToUser }.getOrDefault(false)) return null

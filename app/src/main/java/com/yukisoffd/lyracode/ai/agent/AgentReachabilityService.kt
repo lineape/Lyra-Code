@@ -31,7 +31,7 @@ internal class AgentReachabilityService(
             .apply { if (profile.apiKey.isNotBlank()) addHeader("Authorization", "Bearer ${profile.apiKey}") }
             .get()
             .build()
-        client.newCall(request).execute().use { response ->
+        client.newCall(request.withProviderKeys(profile)).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) error("获取模型失败 ${response.code}: ${body.take(500)}")
             val root = JSONObject(body)
@@ -96,7 +96,7 @@ internal class AgentReachabilityService(
             ApiProfile.API_FORMAT_GEMINI -> builder.apply { if (profile.apiKey.isNotBlank()) addHeader("x-goog-api-key", profile.apiKey) }
             else -> builder.apply { if (profile.apiKey.isNotBlank()) addHeader("Authorization", "Bearer ${profile.apiKey}") }
         }
-        return builder.build()
+        return builder.build().withProviderKeys(profile)
     }
 
     private fun modelReachabilityRequest(profile: ApiProfile, model: String): Request {
@@ -205,7 +205,7 @@ internal class AgentReachabilityService(
         )
         requests.forEach { request ->
             runCatching {
-                client.newCall(request).execute().use { response ->
+                client.newCall(request.withProviderKeys(profile)).execute().use { response ->
                     val body = response.body?.string().orEmpty()
                     if (!response.isSuccessful) error("获取 Claude 模型失败 ${response.code}: ${body.take(500)}")
                     val models = parseModelIds(body).takeIf { it.isNotEmpty() } ?: error("模型列表为空")
@@ -222,7 +222,7 @@ internal class AgentReachabilityService(
             .apply { if (profile.apiKey.isNotBlank()) addHeader("x-goog-api-key", profile.apiKey) }
             .get()
             .build()
-        client.newCall(request).execute().use { response ->
+        client.newCall(request.withProviderKeys(profile)).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) error("获取 Gemini 模型失败 ${response.code}: ${body.take(500)}")
             val data = JSONObject(body).optJSONArray("models") ?: JSONArray()

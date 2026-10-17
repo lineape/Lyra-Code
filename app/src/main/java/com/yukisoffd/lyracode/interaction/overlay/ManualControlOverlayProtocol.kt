@@ -14,6 +14,7 @@ import com.yukisoffd.lyracode.interaction.model.ScreenSnapshot
 import com.yukisoffd.lyracode.interaction.model.SemanticAction
 import com.yukisoffd.lyracode.interaction.model.SemanticNode
 import com.yukisoffd.lyracode.interaction.policy.DeviceActionPolicy
+import com.yukisoffd.lyracode.interaction.session.ManualControlController
 import com.yukisoffd.lyracode.interaction.policy.DevicePolicyDecision
 import com.yukisoffd.lyracode.interaction.session.ManualControlState
 import com.yukisoffd.lyracode.interaction.session.ManualControlStatus
@@ -95,7 +96,9 @@ internal object ManualControlOverlayProtocol {
     private const val KEY_BEFORE_FINGERPRINT = "before_fingerprint"
     private const val KEY_AFTER_FINGERPRINT = "after_fingerprint"
 
-    fun encode(state: ManualControlState): Bundle = Bundle().apply {
+    fun encode(state: ManualControlState, fullAccess: Boolean = ManualControlController.fullAccessEnabled()): Bundle = Bundle().apply {
+        // Display metadata only. Incoming overlay commands are always rechecked in the main process.
+        putBoolean("full_access", fullAccess)
         putString("pet_event", state.petEvent)
         putLong("session_id", state.sessionId)
         state.approval?.let { a -> putBundle("approval", Bundle().apply {
@@ -116,7 +119,7 @@ internal object ManualControlOverlayProtocol {
         putLong(EXTRA_ACTIVE_UNTIL, state.activeUntilEpochMillis)
         putString(KEY_STATUS, state.status.name)
         putString(KEY_TARGET_PACKAGE, state.targetPackage)
-        state.latestSnapshot?.let { putBundle(KEY_SNAPSHOT, encodeSnapshot(it, state.selection)) }
+        state.latestSnapshot?.let { putBundle(KEY_SNAPSHOT, encodeSnapshot(it, state.selection, fullAccess)) }
         state.selection?.let { putBundle(KEY_SELECTION, encodeSelection(it)) }
         state.lastResult?.let { putBundle(KEY_RESULT, encodeResult(it)) }
     }
@@ -144,7 +147,7 @@ internal object ManualControlOverlayProtocol {
             status = status,
             targetPackage = bundle.getString(KEY_TARGET_PACKAGE),
             latestSnapshot = bundle.getBundle(KEY_SNAPSHOT)?.let(::decodeSnapshot),
-            selection = bundle.getBundle(KEY_SELECTION)?.let(::decodeSelection),
+            selection = bundle.getBundle(KEY_SELECTION)?.let { decodeSelection(it, bundle.getBoolean("full_access")) },
             lastResult = bundle.getBundle(KEY_RESULT)?.let(::decodeResult),
         )
     }
@@ -185,7 +188,7 @@ internal object ManualControlOverlayProtocol {
         )
     }
 
-    private fun encodeSnapshot(snapshot: ScreenSnapshot, selection: ManualActionSelection?): Bundle = Bundle().apply {
+    private fun encodeSnapshot(snapshot: ScreenSnapshot, selection: ManualActionSelection?, fullAccess: Boolean): Bundle = Bundle().apply {
         putString(KEY_SNAPSHOT_ID, snapshot.snapshotId)
         putLong(KEY_CAPTURED_AT, snapshot.capturedAtEpochMillis)
         putString(KEY_ACTIVE_PACKAGE, snapshot.activePackage)
@@ -199,7 +202,7 @@ internal object ManualControlOverlayProtocol {
         val visibleNodes = snapshot.nodes.asSequence()
             .filter { node ->
                 node.handle == selection?.elementHandle || ManualDeviceAction.entries.any { action ->
-                    DeviceActionPolicy.evaluate(snapshot.activePackage.orEmpty(), node, action) is DevicePolicyDecision.Allowed
+                    DeviceActionPolicy.evaluate(snapshot.activePackage.orEmpty(), node, action, snapshot.nodes, fullAccess) is DevicePolicyDecision.Allowed
                 }
             }
             .sortedByDescending { it.handle == selection?.elementHandle }
@@ -312,16 +315,17 @@ internal object ManualControlOverlayProtocol {
         putString(EXTRA_ACTION, selection.action.name)
         putString(KEY_EXPECTED_PACKAGE, selection.expectedPackage)
         putBoolean("automatic", selection.automatic)
+        putBoolean("requires_full_access", selection.requiresFullAccess)
         putInt("confirmation_stage", selection.confirmationStage)
         putString("confirmation_token", selection.confirmationToken)
         putString("input_text", selection.inputText)
     }
 
-    private fun decodeSelection(bundle: Bundle): ManualActionSelection? {
+    private fun decodeSelection(bundle: Bundle, fullAccess: Boolean): ManualActionSelection? {
         val action = enumValueOrNull<ManualDeviceAction>(bundle.getString(EXTRA_ACTION)) ?: return null
         val inputText = bundle.getString("input_text")
         if (action == ManualDeviceAction.SET_TEXT &&
-            !com.yukisoffd.lyracode.interaction.policy.TextInputPolicy.isValidText(inputText)) return null
+            !com.yukisoffd.lyracode.interaction.policy.TextInputPolicy.isValidText(inputText, fullAccess)) return null
         if (action != ManualDeviceAction.SET_TEXT && inputText != null) return null
         return ManualActionSelection(
             snapshotId = bundle.getString(KEY_SNAPSHOT_ID) ?: return null,
@@ -332,6 +336,7 @@ internal object ManualControlOverlayProtocol {
             inputText = inputText,
             confirmationStage = bundle.getInt("confirmation_stage", 1),
             automatic = bundle.getBoolean("automatic"),
+            requiresFullAccess = bundle.getBoolean("requires_full_access"),
             confirmationToken = bundle.getString("confirmation_token") ?: bundle.getString(EXTRA_REQUEST_ID) ?: return null,
         )
     }

@@ -462,6 +462,17 @@ class DeviceChatInstrumentedTest {
         assertEquals(selection, ManualControlOverlayProtocol.decode(ManualControlOverlayProtocol.encode(original))!!.selection)
     }
 
+    @Test fun fullAccessTextIpcSupportsClearingAndLongTextWithoutGrantingAuthorization() {
+        for (text in listOf("", "x".repeat(1000))) {
+            val selection = com.yukisoffd.lyracode.interaction.model.ManualActionSelection("snapshot", "field",
+                com.yukisoffd.lyracode.interaction.model.ManualDeviceAction.SET_TEXT, "example.app", inputText = text,
+                automatic = true)
+            val state = ManualControlState(selection = selection)
+            assertEquals(selection, ManualControlOverlayProtocol.decode(ManualControlOverlayProtocol.encode(state, fullAccess = true))!!.selection)
+            assertNull(ManualControlOverlayProtocol.decode(ManualControlOverlayProtocol.encode(state, fullAccess = false))!!.selection)
+        }
+    }
+
     @Test fun textApprovalKeepsExactPayloadAndFullScrollablePreview() {
         val text = "第一行  保留空格\n" + "普通草稿".repeat(110)
         val selection = com.yukisoffd.lyracode.interaction.model.ManualActionSelection("snapshot", "field",

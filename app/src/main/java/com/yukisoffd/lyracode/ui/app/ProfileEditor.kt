@@ -14,6 +14,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -84,6 +86,8 @@ internal fun ProfileEditDialog(
     avatarPath: String?,
     onDismiss: () -> Unit,
     onSaved: (String, String?) -> Unit,
+    onServicesChanged: () -> Unit = {},
+    onOpenAccount: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -108,7 +112,7 @@ internal fun ProfileEditDialog(
         onDismissRequest = onDismiss,
         title = { Text(context.getString(R.string.label_profile)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                     Modifier
                         .size(128.dp)
@@ -170,6 +174,8 @@ internal fun ProfileEditDialog(
                     Text(context.getString(R.string.label_vertical_position), color = KimiMuted, style = MaterialTheme.typography.labelMedium)
                     Slider(value = offsetY, onValueChange = { offsetY = it }, valueRange = -1f..1f)
                 }
+                KimiSectionLabel(context.getString(R.string.mengxi_third_party_accounts))
+                KimiCardBox { NewApiAccountSection(settings, onServicesChanged, onOpenAccount) }
             }
         },
         confirmButton = {

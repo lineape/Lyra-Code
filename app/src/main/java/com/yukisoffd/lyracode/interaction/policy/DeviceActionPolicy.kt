@@ -25,12 +25,18 @@ internal object DeviceActionPolicy {
         node: SemanticNode,
         action: ManualDeviceAction,
         pageNodes: List<SemanticNode> = emptyList(),
+        fullAccess: Boolean = false,
     ): DevicePolicyDecision {
-        if (!isPackageAllowed(packageName)) {
+        if (!isPackageAllowed(packageName, fullAccess)) {
             return DevicePolicyDecision.Blocked(DevicePolicyBlockReason.PACKAGE_NOT_ALLOWED)
         }
         if (node.packageName != null && node.packageName != packageName) {
             return DevicePolicyDecision.Blocked(DevicePolicyBlockReason.PACKAGE_NOT_ALLOWED)
+        }
+        if (fullAccess) {
+            if (!node.enabled || !node.visible) return DevicePolicyDecision.Blocked(DevicePolicyBlockReason.INVISIBLE_OR_DISABLED)
+            return if (advertises(node, action, fullAccess = true)) DevicePolicyDecision.Allowed
+                else DevicePolicyDecision.Blocked(DevicePolicyBlockReason.ACTION_NOT_ADVERTISED)
         }
         if (node.password) return DevicePolicyDecision.Blocked(DevicePolicyBlockReason.PASSWORD_OR_CODE)
         if (node.password || node.accessibilityDataSensitive || node.redacted ||
@@ -69,14 +75,16 @@ internal object DeviceActionPolicy {
         return DevicePolicyDecision.Allowed
     }
 
-    fun isPackageAllowed(packageName: String): Boolean {
+    fun isPackageAllowed(packageName: String, fullAccess: Boolean = false): Boolean {
         val normalized = packageName.lowercase()
+        if (fullAccess) return normalized.isNotBlank()
         return normalized.isNotBlank() &&
             normalized !in BLOCKED_SYSTEM_PACKAGES &&
             BLOCKED_SYSTEM_SUFFIXES.none(normalized::endsWith)
     }
 
-    fun requiresSecondConfirmation(node: SemanticNode, action: ManualDeviceAction, pageNodes: List<SemanticNode> = emptyList()): Boolean {
+    fun requiresSecondConfirmation(node: SemanticNode, action: ManualDeviceAction, pageNodes: List<SemanticNode> = emptyList(), fullAccess: Boolean = false): Boolean {
+        if (fullAccess) return false
         if (action != ManualDeviceAction.ACTIVATE) return false
         val label = listOfNotNull(node.text, node.contentDescription, node.hintText, node.resourceId?.substringAfterLast('/')).joinToString(" ").replace('_', ' ').replace('-', ' ').lowercase()
         if (TextInputPolicy.isSensitive(node.inputType, label) || Regex("\\b(pay|buy|purchase|transfer|authorize|password|otp)\\b|支付|付款|转账|轉帳|密码|密碼|验证码|驗證碼|购买|購買").containsMatchIn(label)) return false
@@ -101,9 +109,9 @@ internal object DeviceActionPolicy {
 
     private val FINANCIAL_ACTION = Regex("\\b(buy|purchase|pay|payment|transfer|checkout|withdraw|deposit|trade|sell|subscribe fund)\\b|购买|購買|买入|買入|卖出|賣出|支付|付款|转账|轉帳|汇款|匯款|提现|提現|充值|下单|下單|确认交易|申购|申購|赎回|贖回", RegexOption.IGNORE_CASE)
 
-    private fun advertises(node: SemanticNode, action: ManualDeviceAction): Boolean = when (action) {
+    private fun advertises(node: SemanticNode, action: ManualDeviceAction, fullAccess: Boolean = false): Boolean = when (action) {
         ManualDeviceAction.SET_TEXT -> node.editable && SemanticAction.SET_TEXT in node.actions &&
-            TextInputPolicy.isOrdinaryText(node.inputType) && node.textFingerprint != null
+            (fullAccess || TextInputPolicy.isOrdinaryText(node.inputType)) && node.textFingerprint != null
         ManualDeviceAction.ACTIVATE -> SemanticAction.ACTIVATE in node.actions
         ManualDeviceAction.SCROLL_FORWARD -> {
             SemanticAction.SCROLL_FORWARD in node.actions ||

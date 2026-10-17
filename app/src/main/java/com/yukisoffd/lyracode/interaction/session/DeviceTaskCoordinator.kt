@@ -154,7 +154,7 @@ internal object DeviceTaskCoordinator {
                     DeviceQuestionBroker.ask(request, app.getString(com.yukisoffd.lyracode.R.string.ask_user_recommended))
                 }
                 agent.approvalHandler = { request ->
-                    val approved = DeviceApprovalBroker.request(request.summary,
+                    val approved = com.yukisoffd.lyracode.interaction.DeviceFullAccess.isEnabled(app) || DeviceApprovalBroker.request(request.summary,
                         "${request.risk}\n${request.arguments}".take(16000),
                         twice = request.toolName.contains("delete") || request.toolName.contains("uninstall") ||
                             Regex("""(?i)\b(rm|rmdir|uninstall|delete)\b""").containsMatchIn(request.arguments))
@@ -162,8 +162,10 @@ internal object DeviceTaskCoordinator {
                 }
                 provider.nativeDefinitions = { agent.floatingToolDefinitions() }
                 provider.nativeExecute = { name, args -> agent.executeFloatingTool(id, name, args) }
+                provider.fullAccessEnabled = { com.yukisoffd.lyracode.interaction.DeviceFullAccess.isEnabled(app) }
                 provider.deviceAvailable = { DeviceInteractionAvailability.isSupported() && settings.deviceInteractionExperimentalEnabled && AccessibilityConnection.connected.value }
                 provider.extended = com.yukisoffd.lyracode.interaction.agent.DeviceExtendedTools(app, settings, agent, id) { provider.ensureSession() }
+                provider.capabilityProbe = { provider.extended!!.capabilities() }
                 activeAgent = agent
                 run {
                     agent.chat(id, input, profile, profile.selectedModel, propagateErrors = true) { delta ->
@@ -232,13 +234,15 @@ internal object DeviceTaskCoordinator {
     private fun checkAvailability(context: Context) {
         check(DeviceInteractionAvailability.isSupported()) { context.getString(com.yukisoffd.lyracode.R.string.device_interaction_status_unsupported) }
         check(OverlayPermission.isGranted(context)) { "悬浮窗权限不可用。" }
-        check(context.getSystemService(PowerManager::class.java).isInteractive &&
-            !context.getSystemService(KeyguardManager::class.java).isKeyguardLocked) { "锁屏时不能执行设备任务。" }
+        check(com.yukisoffd.lyracode.interaction.DeviceFullAccess.isEnabled(context) ||
+            (context.getSystemService(PowerManager::class.java).isInteractive &&
+                !context.getSystemService(KeyguardManager::class.java).isKeyguardLocked)) { "普通模式下锁屏时不能执行设备任务。" }
     }
 
-    // Conservative Alpha exclusion in addition to the existing manual debugger policy.
-    internal fun isAgentPackageAllowed(packageName: String): Boolean =
-        com.yukisoffd.lyracode.interaction.policy.DeviceActionPolicy.isPackageAllowed(packageName) &&
-            listOf("password", "authenticator", "keychain")
+    // Standard mode excludes protected packages; the authenticated grant lifts this app policy.
+    internal fun isAgentPackageAllowed(packageName: String, fullAccess: Boolean = false): Boolean =
+        com.yukisoffd.lyracode.interaction.policy.DeviceActionPolicy.isPackageAllowed(packageName, fullAccess) &&
+            (fullAccess || listOf("password", "authenticator", "keychain")
                 .none { packageName.contains(it, ignoreCase = true) }
+            )
 }

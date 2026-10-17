@@ -146,7 +146,7 @@ internal fun deepSeekFileUploadRequest(
         .url(endpoint)
         .apply { if (profile.apiKey.isNotBlank()) addHeader("Authorization", "Bearer ${profile.apiKey}") }
         .post(body)
-        .build()
+        .build().withProviderKeys(profile)
 }
 
 internal class DeepSeekFilesApi(

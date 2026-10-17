@@ -15,10 +15,10 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-4.1.0-blue" />
+  <img alt="Version" src="https://img.shields.io/badge/version-4.1.1-blue" />
   <img alt="Android" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white" />
-  <img alt="PRoot Linux" src="https://img.shields.io/badge/PRoot-Linux-FCC624?logo=linux&logoColor=black" />
-  <img alt="Termux" src="https://img.shields.io/badge/Termux-integrated-000000" />
+  <a href="https://github.com/termux/proot"><img alt="PRoot Linux" src="https://img.shields.io/badge/PRoot-Linux-FCC624?logo=linux&logoColor=black" /></a>
+  <a href="https://github.com/termux/termux-app"><img alt="Termux" src="https://img.shields.io/badge/Termux-integrated-000000" /></a>
   <img alt="License" src="https://img.shields.io/badge/license-AGPL--3.0-orange" />
 </p>
 

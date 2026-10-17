@@ -5,6 +5,7 @@ import android.content.Intent
 import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
+import android.os.CancellationSignal
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
@@ -45,9 +48,11 @@ import com.yukisoffd.lyracode.KimiMuted
 import com.yukisoffd.lyracode.R
 import com.yukisoffd.lyracode.data.AppSettings
 import com.yukisoffd.lyracode.interaction.DeviceInteractionAvailability
+import com.yukisoffd.lyracode.interaction.DeviceFullAccess
 import com.yukisoffd.lyracode.interaction.overlay.OverlayPermission
 import com.yukisoffd.lyracode.interaction.service.AccessibilityConnection
 import com.yukisoffd.lyracode.interaction.session.ManualControlController
+import com.yukisoffd.lyracode.interaction.session.DeviceTaskCoordinator
 
 @Composable
 internal fun DeviceInteractionSettings(
@@ -60,10 +65,19 @@ internal fun DeviceInteractionSettings(
         mutableStateOf(supported && settings.deviceInteractionExperimentalEnabled)
     }
     var permissionRevision by remember { mutableIntStateOf(0) }
+    var authentication by remember { mutableStateOf<CancellationSignal?>(null) }
+    var authenticating by remember { mutableStateOf(false) }
+    var authenticationError by remember { mutableStateOf<String?>(null) }
     val connected by AccessibilityConnection.connected.collectAsState()
 
     ObserveAccessibilitySetting(context) { permissionRevision++ }
     ObservePermissionResume { permissionRevision++ }
+    DisposableEffect(context) {
+        onDispose { authentication?.cancel() }
+    }
+
+    val deviceSecure = remember(permissionRevision) { DeviceFullAccess.isDeviceSecure(context) }
+    val fullAccessEnabled = remember(permissionRevision, experimentEnabled) { DeviceFullAccess.isEnabled(context) }
 
     val serviceEnabled = remember(permissionRevision, connected) {
         AccessibilityConnection.isEnabledInSystem(context)
@@ -113,6 +127,10 @@ internal fun DeviceInteractionSettings(
                     experimentEnabled = enabled
                     settings.deviceInteractionExperimentalEnabled = enabled
                     if (!enabled) {
+                        authentication?.cancel()
+                        authenticating = false
+                        DeviceFullAccess.disable(context)
+                        DeviceTaskCoordinator.pause()
                         ManualControlController.clearDeviceState()
                     }
                 },
@@ -188,6 +206,61 @@ internal fun DeviceInteractionSettings(
             Spacer(Modifier.width(8.dp))
             Text(context.getString(R.string.device_interaction_open_overlay_settings))
         }
+    }
+
+    KimiCardBox {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(context.getString(R.string.device_full_access_title), style = MaterialTheme.typography.titleSmall)
+                Text(
+                    context.getString(if (fullAccessEnabled) R.string.device_full_access_enabled else R.string.device_full_access_desc),
+                    color = KimiMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(
+                checked = fullAccessEnabled,
+                modifier = Modifier.semantics { contentDescription = context.getString(R.string.device_full_access_title) },
+                enabled = supported && experimentEnabled && deviceSecure && !authenticating,
+                onCheckedChange = { enabled ->
+                    authenticationError = null
+                    if (!enabled) {
+                        authentication?.cancel()
+                        DeviceFullAccess.disable(context)
+                        DeviceTaskCoordinator.pause()
+                        ManualControlController.clearDeviceState()
+                        permissionRevision++
+                    } else {
+                        authenticating = true
+                        authentication = DeviceFullAccess.authenticate(context) { granted, error ->
+                            authenticating = false
+                            authenticationError = error
+                            if (granted) {
+                                DeviceTaskCoordinator.pause()
+                                ManualControlController.clearDeviceState()
+                            }
+                            permissionRevision++
+                        }
+                    }
+                },
+            )
+        }
+        if (!deviceSecure) Text(
+            context.getString(R.string.device_full_access_requires_lock),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        if (authenticating) Text(
+            context.getString(R.string.device_full_access_auth_pending),
+            color = KimiMuted,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        authenticationError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
     }
 
     KimiCardBox {

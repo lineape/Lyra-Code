@@ -54,6 +54,7 @@ internal object ManualControlController {
     private val _state = MutableStateFlow(ManualControlState())
     val state: StateFlow<ManualControlState> = _state.asStateFlow()
     private var expiryJob: Job? = null
+    var fullAccessEnabled: () -> Boolean = { false }
 
     @Synchronized
     fun start(
@@ -92,7 +93,7 @@ internal object ManualControlController {
         val current = _state.value
         if (!current.isActive()) return
         val packageName = snapshot.activePackage.orEmpty()
-        if (!DeviceActionPolicy.isPackageAllowed(packageName)) {
+        if (!DeviceActionPolicy.isPackageAllowed(packageName, fullAccessEnabled())) {
             _state.value = current.copy(
                 status = ManualControlStatus.PAUSED_PACKAGE_CHANGED,
                 targetPackage = null,
@@ -120,21 +121,24 @@ internal object ManualControlController {
     }
 
     @Synchronized
-    fun select(handle: String, action: ManualDeviceAction, inputText: String? = null, automatic: Boolean = false): Boolean {
+    fun select(handle: String, action: ManualDeviceAction, inputText: String? = null, automatic: Boolean = false, requiresFullAccess: Boolean = false): Boolean {
+        val fullAccess = fullAccessEnabled()
+        if (requiresFullAccess && !fullAccess) return false
         if (action == ManualDeviceAction.SET_TEXT) {
-            if (!com.yukisoffd.lyracode.interaction.policy.TextInputPolicy.isValidText(inputText)) return false
+            if (!com.yukisoffd.lyracode.interaction.policy.TextInputPolicy.isValidText(inputText, fullAccess)) return false
         } else if (inputText != null) return false
         val current = _state.value
         if (!current.isActive() || current.status in setOf(ManualControlStatus.EXECUTING, ManualControlStatus.VERIFYING)) return false
         val snapshot = current.latestSnapshot ?: return false
         val targetPackage = current.targetPackage ?: return false
         val node = snapshot.nodes.firstOrNull { it.handle == handle } ?: return false
-        if (DeviceActionPolicy.evaluate(targetPackage, node, action, snapshot.nodes) !is DevicePolicyDecision.Allowed) {
+        if (DeviceActionPolicy.evaluate(targetPackage, node, action, snapshot.nodes, fullAccess) !is DevicePolicyDecision.Allowed) {
             return false
         }
         _state.value = current.copy(
             status = ManualControlStatus.TARGET_SELECTED,
-            selection = ManualActionSelection(snapshot.snapshotId, handle, action, targetPackage, inputText = inputText, automatic = automatic),
+            selection = ManualActionSelection(snapshot.snapshotId, handle, action, targetPackage, inputText = inputText,
+                automatic = automatic, requiresFullAccess = requiresFullAccess),
             lastResult = null,
         )
         return true
@@ -169,8 +173,17 @@ internal object ManualControlController {
         val snapshot = current.latestSnapshot ?: return null
         if (selection.snapshotId != snapshot.snapshotId) return null
         val node = snapshot.nodes.firstOrNull { it.handle == selection.elementHandle } ?: return null
-        if (DeviceActionPolicy.requiresSecondConfirmation(node, selection.action, snapshot.nodes) && expectedRequestId == null) return null
-        if (DeviceActionPolicy.requiresSecondConfirmation(node, selection.action, snapshot.nodes) && selection.confirmationStage < 2) {
+        val fullAccess = fullAccessEnabled()
+        if (selection.requiresFullAccess && !fullAccess) {
+            clearSelection()
+            return null
+        }
+        if (DeviceActionPolicy.evaluate(selection.expectedPackage, node, selection.action, snapshot.nodes, fullAccess) !is DevicePolicyDecision.Allowed) {
+            clearSelection()
+            return null
+        }
+        if (DeviceActionPolicy.requiresSecondConfirmation(node, selection.action, snapshot.nodes, fullAccess) && expectedRequestId == null) return null
+        if (DeviceActionPolicy.requiresSecondConfirmation(node, selection.action, snapshot.nodes, fullAccess) && selection.confirmationStage < 2) {
             _state.value = current.copy(selection = selection.copy(confirmationStage = 2, confirmationToken = java.util.UUID.randomUUID().toString()))
             return null
         }
@@ -227,9 +240,9 @@ internal object ManualControlController {
     }
 
     @Synchronized
-    fun selectAgentTarget(snapshotId: String, handle: String, action: ManualDeviceAction, inputText: String? = null, automatic: Boolean = false): Boolean {
+    fun selectAgentTarget(snapshotId: String, handle: String, action: ManualDeviceAction, inputText: String? = null, automatic: Boolean = false, requiresFullAccess: Boolean = false): Boolean {
         if (_state.value.latestSnapshot?.snapshotId != snapshotId) return false
-        return select(handle, action, inputText, automatic)
+        return select(handle, action, inputText, automatic, requiresFullAccess)
     }
 
     /** Stop and dispatch share the same lock: queued actions cannot run after stop returns. */
@@ -237,6 +250,7 @@ internal object ManualControlController {
     fun dispatchIfCurrent(selection: ManualActionSelection, dispatch: () -> Boolean): Boolean {
         val current = _state.value
         if (!current.isActive() || current.status != ManualControlStatus.EXECUTING || current.selection !== selection) return false
+        if (selection.requiresFullAccess && !fullAccessEnabled()) return false
         return dispatch()
     }
 }

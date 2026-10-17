@@ -77,6 +77,8 @@ class LyraAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         if (!DeviceInteractionAvailability.isSupported()) { disableSelf(); return }
+        val app = applicationContext
+        ManualControlController.fullAccessEnabled = { com.yukisoffd.lyracode.interaction.DeviceFullAccess.isEnabled(app) }
         AccessibilityConnection.markConnected()
         com.yukisoffd.lyracode.interaction.perception.DeviceScreenshotSource.service = this
         ManualControlCommandBridge.attach(::executeSelectedAction)
@@ -102,7 +104,7 @@ class LyraAccessibilityService : AccessibilityService() {
         }
         if (!ManualControlController.state.value.isActive()) return
         val eventPackage = event?.packageName?.toString() ?: return
-        if (eventPackage == packageName) return
+        if (eventPackage == packageName && !ManualControlController.fullAccessEnabled()) return
         if (ManualControlController.state.value.status in EXECUTION_STATUSES) return
 
         scheduleCapture(EVENT_CAPTURE_DELAY_MILLIS)
@@ -166,7 +168,7 @@ class LyraAccessibilityService : AccessibilityService() {
     private fun publishCapture(result: SnapshotCaptureResult) {
         when (result) {
             is SnapshotCaptureResult.Success -> {
-                if (result.snapshot.activePackage != packageName) {
+                if (result.snapshot.activePackage != packageName || ManualControlController.fullAccessEnabled()) {
                     val manualState = ManualControlController.state.value
                     if (manualState.isActive() && manualState.status !in EXECUTION_STATUSES) {
                         ManualControlController.publish(result.snapshot)
@@ -186,7 +188,7 @@ class LyraAccessibilityService : AccessibilityService() {
         Log.i(LOG_TAG, "confirm_received action=${selection.action.name}")
         val expectedNode = before.nodes.firstOrNull { it.handle == selection.elementHandle }
         if (selection.action == com.yukisoffd.lyracode.interaction.model.ManualDeviceAction.SET_TEXT &&
-            !com.yukisoffd.lyracode.interaction.policy.TextInputPolicy.isValidText(selection.inputText)) {
+            !com.yukisoffd.lyracode.interaction.policy.TextInputPolicy.isValidText(selection.inputText, ManualControlController.fullAccessEnabled())) {
             finishWithStatus(selection, before, DeviceActionStatus.BLOCKED)
             return
         }
@@ -194,7 +196,7 @@ class LyraAccessibilityService : AccessibilityService() {
             finishWithStatus(selection, before, DeviceActionStatus.STALE)
             return
         }
-        val policy = DeviceActionPolicy.evaluate(selection.expectedPackage, expectedNode, selection.action, before.nodes)
+        val policy = DeviceActionPolicy.evaluate(selection.expectedPackage, expectedNode, selection.action, before.nodes, ManualControlController.fullAccessEnabled())
         if (policy is DevicePolicyDecision.Blocked) {
             finishWithStatus(selection, before, DeviceActionStatus.BLOCKED, blockReason = policy.reason.name)
             return
@@ -243,11 +245,14 @@ class LyraAccessibilityService : AccessibilityService() {
                 }
                 is NodeResolution.Resolved -> {
                     val accepted = ManualControlController.dispatchIfCurrent(selection) {
-                        if (!probeIsAllowed() || !getSystemService(android.os.PowerManager::class.java).isInteractive ||
-                            getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked) false
+                        val fullAccess = ManualControlController.fullAccessEnabled()
+                        if (!probeIsAllowed() || (!fullAccess && (!getSystemService(android.os.PowerManager::class.java).isInteractive ||
+                            getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked))) false
                         else runCatching {
+                            if (DeviceActionPolicy.evaluate(selection.expectedPackage, expectedNode, selection.action, before.nodes, fullAccess)
+                                !is DevicePolicyDecision.Allowed) return@runCatching false
                             if (selection.action == com.yukisoffd.lyracode.interaction.model.ManualDeviceAction.SET_TEXT)
-                                com.yukisoffd.lyracode.interaction.action.NativeTextAction.perform(resolution.node, selection.inputText!!)
+                                com.yukisoffd.lyracode.interaction.action.NativeTextAction.perform(resolution.node, selection.inputText!!, fullAccess)
                             else resolution.node.performAction(resolution.actionId)
                         }.getOrDefault(false)
                     }
@@ -288,7 +293,7 @@ class LyraAccessibilityService : AccessibilityService() {
                 is SnapshotCaptureResult.Success -> {
                     val after = capture.snapshot
                     val status = if (selection.action == com.yukisoffd.lyracode.interaction.model.ManualDeviceAction.SET_TEXT) {
-                        com.yukisoffd.lyracode.interaction.action.TextActionVerifier.verify(selection, before, after)
+                        com.yukisoffd.lyracode.interaction.action.TextActionVerifier.verify(selection, before, after, ManualControlController.fullAccessEnabled())
                     } else ActionVerifier.verify(before, after, selection.expectedPackage)
                     ManualControlController.finish(
                         actionResult(

@@ -144,6 +144,7 @@ internal fun SettingsScreen(
     var settingsQuery by rememberSaveable { mutableStateOf("") }
     var skipNextTransition by remember { mutableStateOf(false) }
     val settingsListScroll = rememberScrollState()
+    val aboutScrollState = rememberScrollState()
     val context = LocalContext.current
     if (showUnsupportedDevice) {
         androidx.compose.material3.AlertDialog(
@@ -448,6 +449,7 @@ internal fun SettingsScreen(
                         },
                         updateInfoState = aboutUpdateInfoState,
                         showUpdateDialog = detail == "about",
+                        scrollState = aboutScrollState,
                     )
                     "github_acceleration" -> GitHubAccelerationSettingsScreen(initialTestUrl = gitHubAccelerationTestUrl)
                     "device" -> DeviceInfoScreen()

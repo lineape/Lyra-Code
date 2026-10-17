@@ -17,6 +17,7 @@ data class ManualActionSelection(
     val confirmationStage: Int = 1,
     val confirmationToken: String = requestId,
     val automatic: Boolean = false,
+    val requiresFullAccess: Boolean = false,
 ) {
     // Selections cross only the private overlay IPC channel; never log their text payload.
     override fun toString() = "ManualActionSelection(requestId=$requestId, action=$action, expectedPackage=$expectedPackage, textLength=${inputText?.length})"

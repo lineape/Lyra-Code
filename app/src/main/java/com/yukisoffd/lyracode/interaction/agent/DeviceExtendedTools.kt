@@ -5,6 +5,9 @@ import com.yukisoffd.lyracode.ai.OpenAiAgent
 import com.yukisoffd.lyracode.ai.DEVICE_WORKSPACE_TOOLS
 import com.yukisoffd.lyracode.data.AppSettings
 import com.yukisoffd.lyracode.interaction.perception.DeviceScreenshotSource
+import com.yukisoffd.lyracode.interaction.DeviceFullAccess
+import com.yukisoffd.lyracode.interaction.service.AccessibilityConnection
+import kotlinx.coroutines.CancellationException
 import com.yukisoffd.lyracode.interaction.policy.DeviceShellPolicy
 import com.yukisoffd.lyracode.interaction.policy.TextInputPolicy
 import com.yukisoffd.lyracode.interaction.session.DeviceApprovalBroker
@@ -14,7 +17,7 @@ import com.yukisoffd.lyracode.system.SystemCommandExecutor
 import org.json.JSONArray
 import org.json.JSONObject
 
-internal class DeviceExtendedTools(context: Context, private val settings: AppSettings,
+internal class DeviceExtendedTools(private val context: Context, private val settings: AppSettings,
     private val agent: OpenAiAgent, private val conversationId: Long, private val checkSession: () -> Unit) {
     private val commands = SystemCommandExecutor(context, settings)
     private val vision = settings.visionUnderstandingModelOrNull() ?: settings.selectedProfile().let { profile ->
@@ -25,37 +28,88 @@ internal class DeviceExtendedTools(context: Context, private val settings: AppSe
     private var screenshotFingerprint: String? = null
     private var screenshotDigest: String? = null
     private var lastScreenshotAt = 0L
+    suspend fun capabilities(): String {
+        checkSession()
+        val shellPermission = commands.hasShellPermission()
+        val shellEnabled = settings.requestShellAccess && "execute_shell_command" !in settings.disabledTools()
+        val probe = if (shellEnabled && shellPermission) commands.executeShell("id", 5) { checkSession() } else null
+        checkSession()
+        return JSONObject()
+            .put("adb_shell", JSONObject().put("transport", "Shizuku")
+                .put("enabled", shellEnabled).put("service_running", commands.isShizukuRunning())
+                .put("permission_granted", shellPermission).put("available", probe?.ok == true)
+                .put("probe", probe?.let { JSONObject(it.toJson()) })
+                .put("command_format", "Pass Android shell commands directly, without the adb shell prefix."))
+            .put("accessibility_available", settings.deviceInteractionExperimentalEnabled && AccessibilityConnection.connected.value)
+            .put("vision_available", vision != null)
+            .put("root_enabled", settings.requestRootAccess)
+            .put("full_access_enabled", DeviceFullAccess.isEnabled(context))
+            .put("device_secure", DeviceFullAccess.isDeviceSecure(context))
+            .put("strategy", "When available, combine ADB Shell + accessibility + image recognition; verify each action using fresh observations.")
+            .toString()
+    }
     fun definitions(): JSONArray = agent.deviceWorkspaceDefinitions().apply {
-        if (vision != null) put(tool("device_screenshot", "After upload confirmation, inspect the current window using the configured vision model. Returns visual observations and pixel coordinates. Never captures secure or sensitive pages.", "question"))
-        if (settings.requestShellAccess) put(tool("execute_shell_command", COMMAND_HELP, "command"))
-        if (settings.requestRootAccess) put(tool("execute_root_command", COMMAND_HELP, "command"))
+        if (vision != null) put(tool("device_screenshot", if (DeviceFullAccess.isEnabled(context))
+            "Inspect the current window using the configured vision model under the authenticated full-access grant. Returns visual observations and pixel coordinates; Android may refuse secure-window capture."
+            else "After upload confirmation, inspect the current window using the configured vision model. Returns visual observations and pixel coordinates. Never captures secure or sensitive pages.", "question"))
+        val commandHelp = if (DeviceFullAccess.isEnabled(context))
+            "Run Android commands under the authenticated full-access grant, without repeated approvals or the standard command allowlist. Pass commands directly without adb shell. Actual Shell/Root permissions are still required."
+            else COMMAND_HELP
+        if (settings.requestShellAccess) put(tool("execute_shell_command", commandHelp, "command"))
+        if (settings.requestRootAccess) put(tool("execute_root_command", commandHelp, "command"))
     }
     suspend fun execute(name: String, args: JSONObject): String {
         checkSession()
+        val fullAccess = DeviceFullAccess.isEnabled(context)
+        if (fullAccess && name in setOf("execute_shell_command", "execute_root_command")) {
+            val command = args.optString("command").ifBlank {
+                args.optJSONArray("command_lines")?.let { lines -> (0 until lines.length()).joinToString("\n") { lines.getString(it) } }.orEmpty()
+            }
+            if (command.isBlank()) return "ERROR: EMPTY_COMMAND"
+            val beforeDispatch: suspend () -> Unit = {
+                checkSession()
+                check(DeviceFullAccess.isEnabled(context)) { "完全权限已撤销，请重新检查设备能力。" }
+            }
+            val result = if (name == "execute_root_command") commands.executeRoot(command, args.optInt("timeout_seconds", 60), beforeDispatch = beforeDispatch)
+                else commands.executeShell(command, args.optInt("timeout_seconds", 60), beforeDispatch)
+            screenshotFingerprint = null
+            return result.toJson()
+        }
         val before = ManualControlController.state.value.latestSnapshot ?: return "ERROR: OBSERVE_CURRENT_APP_FIRST"
         val pkg = before.activePackage ?: return "ERROR: NO_FOREGROUND_APP"
-        if (!DeviceTaskCoordinator.isAgentPackageAllowed(pkg)) return "BLOCKED: PACKAGE_NOT_ALLOWED；此系统或凭据界面不支持自动操作，可返回其他应用继续，对话保持。"
+        if (!DeviceTaskCoordinator.isAgentPackageAllowed(pkg, fullAccess)) return "BLOCKED: PACKAGE_NOT_ALLOWED；此系统或凭据界面不支持自动操作，可返回其他应用继续，对话保持。"
         suspend fun approve(title: String, detail: String, twice: Boolean = false): Boolean {
+            if (fullAccess) {
+                checkSession()
+                return DeviceFullAccess.isEnabled(context)
+            }
             if (!DeviceApprovalBroker.request(title, detail, pkg, twice)) return false
             checkSession()
             return ManualControlController.state.value.latestSnapshot?.uiFingerprint == before.uiFingerprint
         }
         if (name == "device_screenshot") {
-            if (before.nodes.any { it.visible && it.windowId == before.activeWindowId && (it.password || it.redacted || it.accessibilityDataSensitive) })
+            if (!fullAccess && before.nodes.any { it.visible && it.windowId == before.activeWindowId && (it.password || it.redacted || it.accessibilityDataSensitive) })
                 return "BLOCKED: SENSITIVE_SCREENSHOT；截图可能包含密码、验证码或受保护字段，禁止上传。请使用已遮蔽字段的 device_observe 继续安全操作，对话保持。"
             val (profile, model) = vision ?: return "ERROR: VISION_MODEL_NOT_CONFIGURED"
             val question = args.getString("question").take(2000)
             if (android.os.SystemClock.elapsedRealtime() - lastScreenshotAt < 1200) return "ERROR: SCREENSHOT_RATE_LIMIT"
             if (!approve("截图识别", "当前窗口截图将发送至 ${profile.name} · $model\n识别目的：$question")) return "ERROR: APPROVAL_INVALIDATED_OR_REJECTED"
             if (!DeviceScreenshotSource.matchesForeground(before)) return "ERROR: FOREGROUND_CHANGED"
-            val image = DeviceScreenshotSource.capture(before.activeWindowId ?: return "ERROR: NO_WINDOW")
+            val image = try {
+                DeviceScreenshotSource.capture(before.activeWindowId ?: return "ERROR: NO_WINDOW")
+            } catch (error: CancellationException) { throw error
+            } catch (error: Exception) {
+                return "ERROR: SCREENSHOT_UNAVAILABLE；${error.message.orEmpty().take(200)}。可检查无障碍节点与 ADB Shell 的实际可用能力继续任务。"
+            }
             checkSession()
+            if (fullAccess && !DeviceFullAccess.isEnabled(context)) return "ERROR: FULL_ACCESS_REVOKED"
             if (ManualControlController.state.value.latestSnapshot?.uiFingerprint != before.uiFingerprint) return "ERROR: PAGE_CHANGED"
             lastScreenshotAt = android.os.SystemClock.elapsedRealtime()
             val report = agent.analyzeDeviceScreenshot(profile, model, image.dataUrl,
-                "Image ${image.width} x ${image.height}, origin in screen pixels (${image.left}, ${image.top}). Return absolute screen coordinates by adding that origin. Return only JSON with boolean sensitive_flow and string description. Set sensitive_flow=true for visible password/OTP entry, transaction execution (buy/sell/pay/transfer), or permission approval controls. Merely opening finance apps or browsing financial information is NOT sensitive; omit all secret values. Task: $question").take(12000)
-            // Coordinate execution remains unavailable if vision reports any protected flow.
-            val safe = runCatching { JSONObject(report.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()).getBoolean("sensitive_flow") == false }.getOrDefault(false)
+                "Image ${image.width} x ${image.height}, origin in screen pixels (${image.left}, ${image.top}). Return absolute screen coordinates by adding that origin. Return only JSON with boolean sensitive_flow and string description. Set sensitive_flow=true for visible password/OTP entry, transaction execution (buy/sell/pay/transfer), or permission approval controls. Merely opening finance apps or browsing financial information is NOT sensitive. ${if (fullAccess) "Authenticated full access is enabled; describe the controls needed for the requested operation, including sensitive controls." else "Omit all secret values."} Task: $question",
+                fullAccess = fullAccess).take(12000)
+            // Standard mode gates coordinates on vision classification; full access lifts that policy.
+            val safe = fullAccess || runCatching { JSONObject(report.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()).getBoolean("sensitive_flow") == false }.getOrDefault(false)
             screenshotFingerprint = before.uiFingerprint.takeIf { safe }
             screenshotDigest = if (safe) TextInputPolicy.fingerprint(image.dataUrl) else null
             return JSONObject().put("classification", "UNTRUSTED_SCREEN_CONTENT").put("snapshot_id", before.snapshotId)
@@ -117,13 +171,13 @@ internal class DeviceExtendedTools(context: Context, private val settings: AppSe
             return JSONObject(result.toJson()).put("verified", verified).toString()
         }
         if (name !in DEVICE_WORKSPACE_TOOLS) return "ERROR: TOOL_NOT_AVAILABLE_IN_DEVICE_SESSION"
-        if (args.toString().length > 16000 ||
-            Regex("(?i)(\\.env|credential|id_rsa|id_ed25519|keystore|token|secret|cookies|/data/|/proc/|/sys/)").containsMatchIn(args.toString()))
+        if (!fullAccess && (args.toString().length > 16000 ||
+            Regex("(?i)(\\.env|credential|id_rsa|id_ed25519|keystore|token|secret|cookies|/data/|/proc/|/sys/)").containsMatchIn(args.toString())))
             return "BLOCKED: PROTECTED_DATA；工具请求涉及凭据文件或受保护路径，或参数过长；请跳过该步骤，对话保持。"
         if (!approve("工作区工具 · $name", args.toString(2), name in setOf("delete_file_or_folder", "global_delete_file_or_folder"))) return "ERROR: APPROVAL_INVALIDATED_OR_REJECTED"
         ManualControlController.updateChat(ManualControlController.state.value.chat.copy(status = "执行中 · $name"))
         val output = agent.executeDeviceWorkspaceTool(conversationId, name, args)
-        return if (Regex("(?i)(api[_ -]?key|access[_ -]?token|password|private[_ -]?key)\\s*[:=]\\s*[^\\s]{4,}|-----BEGIN .*PRIVATE KEY-----").containsMatchIn(output))
+        return if (!fullAccess && Regex("(?i)(api[_ -]?key|access[_ -]?token|password|private[_ -]?key)\\s*[:=]\\s*[^\\s]{4,}|-----BEGIN .*PRIVATE KEY-----").containsMatchIn(output))
             "BLOCKED: PROTECTED_CONTENT_REDACTED；检测到凭据值，工具输出已遮蔽，对话保持。" else output
     }
     private fun tool(name: String, description: String, parameter: String) = JSONObject().put("type", "function")

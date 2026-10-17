@@ -58,6 +58,12 @@ PRoot is available without installing Termux; the two modes can coexist. PRoot u
 - AI charts rendered offline in answers: flowcharts, sequence diagrams, Gantt charts, line/bar/pie charts, mind maps, architecture and relationship diagrams, and electrical circuit schematics, with fullscreen viewing and PNG/SVG/source export. See [inline charts](docs/CHARTS.md).
 - Optional Shizuku and Root tools, each independently switchable.
 
+### Device interaction
+
+Enable device interaction and accessibility in **Settings > Device interaction**, then send tasks through floating chat. The AI first calls `device_get_capabilities` to check actual ADB Shell permissions and availability. When Shell is available, it combines Shizuku Shell, accessibility controls and image recognition, verifying the results of its actions. Image recognition requires a configured vision model.
+
+**Device interaction full access** is off by default. Enabling it requires Android screen-lock credential or biometric verification; devices without a secure screen lock cannot enable it. Once authenticated, the AI can operate any app and perform sensitive actions without the repeated approvals used in standard mode. Turning it off restores standard restrictions. Lyra Code never reads or stores credentials or biometric data, and the grant is excluded from backups and device transfers. Full access does not grant missing Shell, Root or other Android permissions; operations remain subject to actual system capabilities.
+
 ## Getting started
 
 1. Add a model provider and select a model.

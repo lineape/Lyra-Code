@@ -2191,7 +2191,15 @@ Shizuku 与 Root：不属于普通运行时权限，由用户在“系统权限�
     <string name="device_interaction_open_app_details">打开应用详情</string>
     <string name="device_interaction_restricted_settings_notice">侧载 APK 可能需要先进入“应用详情 → 菜单 → 允许受限设置”。Lyra Code 无法自行授予此权限。</string>
     <string name="device_interaction_scope_title">当前范围</string>
-    <string name="device_interaction_scope_desc">通过悬浮对话发送任务，可读取界面、点击、输入和截图。设备操作需要无障碍授权，并遵守操作审批与敏感操作限制。</string>
+    <string name="device_interaction_scope_desc">AI 会先检查 ADB Shell 是否可用，再联合 Shizuku Shell、无障碍与图片识别执行操作。普通模式保留审批和敏感操作限制；身份验证后启用完全权限可解除这些应用内限制。实际能力取决于 Android 授权和已配置的图片识别模型。</string>
+    <string name="device_full_access_title">设备交互完全权限</string>
+    <string name="device_full_access_desc">验证锁屏密码或生物信息后，可操作任意应用并执行支付、发送、删除、系统授权等敏感操作，无需重复确认。截图可能发送至已配置的图片识别服务。</string>
+    <string name="device_full_access_enabled">已启用：允许操作任意应用和执行敏感设备操作，无需重复确认。仍受 Android 权限和技术能力限制。关闭后恢复普通模式的限制。</string>
+    <string name="device_full_access_requires_lock">无法启用：请先在 Android 设置中设置安全锁屏凭据或录入生物信息。</string>
+    <string name="device_full_access_auth_title">启用设备交互完全权限</string>
+    <string name="device_full_access_auth_desc">请验证身份，以允许 AI 打开任意应用并执行敏感设备操作，无需重复确认。</string>
+    <string name="device_full_access_auth_pending">等待 Android 系统验证身份…</string>
+    <string name="device_full_access_auth_failed">未完成身份验证，完全权限保持关闭。</string>
     <string name="device_interaction_privacy_notice">无障碍是敏感系统能力。请阅读 Android 的授权说明后再启用 Lyra Code；你可以随时在系统设置中撤销。</string>
     <string name="accessibility_service_label">Lyra 设备交互</string>
     <string name="accessibility_service_description">明确启用后，此服务可为用户主动发起的设备任务读取界面内容并执行操作；不会绕过受保护页面或安全窗口。</string>

@@ -2108,7 +2108,15 @@ Revocation stops new access through that permission but does not automatically e
     <string name="device_interaction_open_app_details">Open app details</string>
     <string name="device_interaction_restricted_settings_notice">For a sideloaded APK, Android may first require App details → menu → Allow restricted settings. Lyra Code cannot grant this itself.</string>
     <string name="device_interaction_scope_title">Current scope</string>
-    <string name="device_interaction_scope_desc">Send tasks through floating chat to read interfaces, tap, type and capture screenshots. Device actions require accessibility permission and follow action approval and sensitive-operation restrictions.</string>
+    <string name="device_interaction_scope_desc">The AI checks ADB Shell availability first, then combines Shizuku Shell, accessibility and image recognition. Standard mode applies approvals and sensitive-operation restrictions; authenticated full access removes these app restrictions. Actual capabilities depend on Android permissions and the configured vision model.</string>
+    <string name="device_full_access_title">Device interaction full access</string>
+    <string name="device_full_access_desc">Verify your screen-lock credential or biometrics to allow any app and sensitive operations, including payments, sending, deletion and system authorization, without repeated approvals. Screenshots may be sent to your configured vision provider.</string>
+    <string name="device_full_access_enabled">Enabled: all apps and sensitive device operations are allowed without repeated approvals. Android permissions and technical limits still apply. Turn off to restore standard restrictions.</string>
+    <string name="device_full_access_requires_lock">Unavailable: set a secure screen-lock credential or enroll biometrics in Android settings first.</string>
+    <string name="device_full_access_auth_title">Enable device interaction full access</string>
+    <string name="device_full_access_auth_desc">Verify your identity to allow the AI to open any app and perform sensitive device operations without repeated approvals.</string>
+    <string name="device_full_access_auth_pending">Waiting for Android identity verification…</string>
+    <string name="device_full_access_auth_failed">Verification did not complete. Full access remains disabled.</string>
     <string name="device_interaction_privacy_notice">Accessibility is a sensitive system capability. Enable Lyra Code only after reviewing Android’s disclosure, and revoke it at any time from system settings.</string>
     <string name="accessibility_service_label">Lyra device interaction</string>
     <string name="accessibility_service_description">When explicitly enabled, this service can inspect interface content and perform actions for user-started device tasks. It does not bypass protected or secure screens.</string>

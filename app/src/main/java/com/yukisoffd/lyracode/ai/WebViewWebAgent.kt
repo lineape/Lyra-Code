@@ -40,10 +40,13 @@ data class WebPageResult(
     val extraction: String = "unknown",
 )
 
-class WebViewWebAgent(
+class WebViewWebAgent internal constructor(
     context: Context,
     private val settings: AppSettings,
+    private val deepSeekClient: DeepSeekWebClient,
 ) {
+    constructor(context: Context, settings: AppSettings) : this(context, settings, DeepSeekWebClient())
+
     private val context = context
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(6, TimeUnit.SECONDS)
@@ -53,6 +56,8 @@ class WebViewWebAgent(
     suspend fun search(query: String, limit: Int = 6): String {
         val cleanQuery = query.trim()
         require(cleanQuery.isNotBlank()) { "Search query must not be empty." }
+        val deepSeek = settings.deepSeekSearchConfig
+        if (deepSeek.enabled) return deepSeekClient.search(deepSeek, cleanQuery, limit)
         val maxResults = limit.coerceIn(1, 10)
         val engines = listOf(
             SearchEngine("DuckDuckGo", "https://html.duckduckgo.com/html/?q=${Uri.encode(cleanQuery)}"),
@@ -119,6 +124,8 @@ class WebViewWebAgent(
     }
     suspend fun readPage(url: String): String {
         val cleanUrl = url.trim()
+        val deepSeek = settings.deepSeekFetchConfig
+        if (deepSeek.enabled) return deepSeekClient.readPage(deepSeek, cleanUrl)
         require(cleanUrl.startsWith("http://") || cleanUrl.startsWith("https://")) { "read_web_page supports only http:// and https:// URLs." }
         blockedHostFor(cleanUrl)?.let { blocked ->
             return "WEB_PAGE_READ_RESULT schema=lyra_web_page_v2\nstatus: blocked_by_user\ntitle: \nurl: $cleanUrl\nnote: The user blocked domain $blocked.\n\nThe page was not read. Do not bypass the block; use another source."

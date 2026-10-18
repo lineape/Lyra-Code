@@ -603,7 +603,7 @@
     <string name="menu_sub_agents">子代理编排</string>
     <string name="menu_sub_agents_desc">选择子代理模型并描述各自擅长的任务</string>
     <string name="menu_web_search">联网搜索</string>
-    <string name="menu_web_search_desc">配置网站黑名单，过滤垃圾或不可信来源</string>
+    <string name="menu_web_search_desc">配置 DeepSeek Search、DeepSeek Fetch 和网站黑名单</string>
     <string name="menu_workspace">工作目录</string>
     <string name="menu_workspace_current">当前：%1$s</string>
     <string name="menu_termux">Termux</string>
@@ -965,9 +965,9 @@
     <string name="tool_run_command">执行命令</string>
     <string name="tool_run_command_desc">通过 Termux 执行命令并返回 stdout/stderr。</string>
     <string name="tool_web_search">联网搜索</string>
-    <string name="tool_web_search_desc">使用内嵌 WebView 搜索互联网。</string>
+    <string name="tool_web_search_desc">使用配置的后端搜索互联网，支持 DeepSeek Search。</string>
     <string name="tool_read_web_page">读取网页</string>
-    <string name="tool_read_web_page_desc">读取 http/https 网页正文。</string>
+    <string name="tool_read_web_page_desc">使用配置的后端读取 HTTP/HTTPS 网页，支持 DeepSeek Fetch。</string>
     <string name="tool_mark_web_sources">网页来源标注</string>
     <string name="tool_mark_web_sources_desc">声明网页引用来源，并要求最终回答就近标注来源链接。</string>
     <string name="tool_manage_app_config">配置管理</string>
@@ -1279,7 +1279,7 @@
 
     <!-- Web Search -->
     <string name="title_domain_blacklist">网站黑名单</string>
-    <string name="blacklist_desc">AI 联网搜索和网页读取会跳过这些域名。普通域名精确匹配，* 通配符匹配子域名。</string>
+    <string name="blacklist_desc">应用内置搜索和网页读取会跳过这些域名。普通域名精确匹配，* 通配符匹配子域名。此黑名单不对 DeepSeek Search 和 DeepSeek Fetch 生效。</string>
     <string name="label_one_domain_per_line">每行一个域名或 URL</string>
     <string name="blacklist_normalize_hint">保存后会自动归一化：移除协议、路径和尾部斜杠，但保留 www.。例如 x.com 只匹配 x.com；*.x.com 匹配 www.x.com、news.x.com 等子域名；如需同时拦截根域名和全部子域名，请同时填写 x.com 与 *.x.com。</string>
     <string name="notice_blacklist_saved">已保存 %1$d 个黑名单域名</string>
@@ -2419,6 +2419,19 @@ Shizuku 与 Root：不属于普通运行时权限，由用户在“系统权限�
     <string name="sponsor_save_success">赞赏码已保存</string>
     <string name="sponsor_save_failed">无法保存赞赏码，请重试。</string>
     <string name="ui_native_svg_rendering">消息及媒体预览中的静态 SVG 渲染</string>
+    <string name="deepseek_search_title">DeepSeek Search</string>
+    <string name="deepseek_fetch_title">DeepSeek Fetch</string>
+    <string name="deepseek_backend_enabled">已启用 · 接管对应联网工具</string>
+    <string name="deepseek_backend_disabled">未启用 · 使用应用内置实现</string>
+    <string name="web_search_blacklist_scope">仅对应用内置搜索和网页读取生效</string>
+    <string name="deepseek_enable_search">启用 DeepSeek Search</string>
+    <string name="deepseek_enable_fetch">启用 DeepSeek Fetch</string>
+    <string name="deepseek_search_description">启用后，web_search 将使用 DeepSeek Search，网站黑名单不生效。</string>
+    <string name="deepseek_fetch_description">启用后，read_web_page 将使用 DeepSeek Fetch，网站黑名单不生效。</string>
+    <string name="deepseek_invalid_url">请输入不含用户名、密码、查询参数和片段的 HTTP/HTTPS 基础 URL。</string>
+    <string name="deepseek_key_required">请输入有效的 DeepSeek API Key。</string>
+    <string name="deepseek_config_hint">请先保存配置，再单独启用。开关状态即时保存；未配置时开关保持关闭且不可用。API Key 安全存储。</string>
+    <string name="deepseek_config_saved">配置已保存</string>
 </resources>
 
 

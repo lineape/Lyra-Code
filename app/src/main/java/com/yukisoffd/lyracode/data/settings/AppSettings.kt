@@ -751,6 +751,25 @@ class AppSettings(context: Context) {
         plainPrefs.edit().putString(KEY_SUB_AGENT_CONFIGS, array.toString()).apply()
     }
 
+    var deepSeekSearchConfig: DeepSeekWebConfig
+        get() = readDeepSeekWebConfig(KEY_DEEPSEEK_SEARCH_CONFIG)
+        set(value) = saveDeepSeekWebConfig(KEY_DEEPSEEK_SEARCH_CONFIG, value)
+
+    var deepSeekFetchConfig: DeepSeekWebConfig
+        get() = readDeepSeekWebConfig(KEY_DEEPSEEK_FETCH_CONFIG)
+        set(value) = saveDeepSeekWebConfig(KEY_DEEPSEEK_FETCH_CONFIG, value)
+
+    private fun readDeepSeekWebConfig(key: String): DeepSeekWebConfig = runCatching {
+        DeepSeekWebConfig.fromJson(JSONObject(securePrefs.getString(key, "{}").orEmpty()))
+    }.getOrDefault(DeepSeekWebConfig()).let { config ->
+        config.copy(enabled = config.enabled && config.isConfigured)
+    }
+
+    private fun saveDeepSeekWebConfig(key: String, value: DeepSeekWebConfig) {
+        val config = value.normalized()
+        securePrefs.edit().putString(key, config.copy(enabled = config.enabled && config.isConfigured).toJson(true).toString()).apply()
+    }
+
     var webSearchBlacklistText: String
         get() = plainPrefs.getString(KEY_WEB_SEARCH_BLACKLIST, "").orEmpty()
         set(value) = plainPrefs.edit()
@@ -1486,6 +1505,8 @@ class AppSettings(context: Context) {
                 }
             })
             .put("webSearchBlacklist", webSearchBlacklistText)
+            .put("deepSeekSearch", deepSeekSearchConfig.toJson(includeSecrets))
+            .put("deepSeekFetch", deepSeekFetchConfig.toJson(includeSecrets))
             .put("selectedApiProfileId", selectedApiProfileId)
             .put("topicSummaryProfileId", topicSummaryProfileId)
             .put("topicSummaryModel", topicSummaryModel)
@@ -1683,6 +1704,12 @@ class AppSettings(context: Context) {
                 imported
             }
             messages += "联网搜索黑名单 ${webSearchBlockedHosts().size} 项"
+        }
+        root.optJSONObject("deepSeekSearch")?.let { config ->
+            deepSeekSearchConfig = DeepSeekWebConfig.fromJson(config, deepSeekSearchConfig.apiKey)
+        }
+        root.optJSONObject("deepSeekFetch")?.let { config ->
+            deepSeekFetchConfig = DeepSeekWebConfig.fromJson(config, deepSeekFetchConfig.apiKey)
         }
         root.optJSONArray("profiles")?.let { array ->
             val imported = parseProfiles(array)
@@ -2358,6 +2385,8 @@ class AppSettings(context: Context) {
         private const val KEY_SUB_AGENT_ORCHESTRATION_ENABLED = "sub_agent_orchestration_enabled"
         private const val KEY_SUB_AGENT_CONFIGS = "sub_agent_configs"
         private const val KEY_WEB_SEARCH_BLACKLIST = "web_search_blacklist"
+        private const val KEY_DEEPSEEK_SEARCH_CONFIG = "deepseek_search_config"
+        private const val KEY_DEEPSEEK_FETCH_CONFIG = "deepseek_fetch_config"
         private const val KEY_MCP_SERVERS = "mcp_servers"
         private const val KEY_LOCAL_MCP_SERVER = "local_mcp_server"
         private const val KEY_SSH_SERVERS = "ssh_servers"

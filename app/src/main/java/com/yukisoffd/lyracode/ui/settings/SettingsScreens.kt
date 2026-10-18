@@ -160,6 +160,7 @@ internal fun SettingsScreen(
         "mengxi_account" -> "profile"
         "mcp_tools" -> "mcp"
         "mcp_tool_detail" -> "mcp_tools"
+        "web_search_blacklist", "deepseek_search", "deepseek_fetch" -> "web_search"
         "github_acceleration" -> if (externalGitHubAccelerationUrl != null) gitHubAccelerationReturnDetail else "about"
         "device" -> "about"
         "sponsor_development" -> "about"
@@ -412,6 +413,19 @@ internal fun SettingsScreen(
                     "mini_server_logs" -> MiniServerLogSettings(miniServerManager)
                     "web_search" -> WebSearchSettings(
                         settings = settings,
+                        externalRevision = controller.settingsRevision.intValue,
+                        onOpenBlacklist = { detail = "web_search_blacklist" },
+                        onOpenDeepSeekSearch = { detail = "deepseek_search" },
+                        onOpenDeepSeekFetch = { detail = "deepseek_fetch" },
+                    )
+                    "web_search_blacklist" -> WebSearchBlacklistSettings(
+                        settings = settings,
+                        externalRevision = controller.settingsRevision.intValue,
+                        onChanged = { controller.settingsRevision.intValue++ },
+                    )
+                    "deepseek_search", "deepseek_fetch" -> DeepSeekWebSettings(
+                        settings = settings,
+                        search = target == "deepseek_search",
                         externalRevision = controller.settingsRevision.intValue,
                         onChanged = { controller.settingsRevision.intValue++ },
                     )
@@ -681,6 +695,9 @@ internal fun settingsDetailTitle(context: Context, detail: String): String = whe
     "topic_summary_model_media_audio" -> uiText(R.string.ui_audio_generation_model)
     "sub_agents" -> context.getString(R.string.detail_sub_agents)
     "web_search" -> context.getString(R.string.detail_web_search)
+    "web_search_blacklist" -> context.getString(R.string.title_domain_blacklist)
+    "deepseek_search" -> context.getString(R.string.deepseek_search_title)
+    "deepseek_fetch" -> context.getString(R.string.deepseek_fetch_title)
     "workspace" -> context.getString(R.string.detail_workspace)
     "theme" -> context.getString(R.string.detail_theme)
     "custom_theme_color" -> uiText(R.string.ui_set_custom_theme_color)

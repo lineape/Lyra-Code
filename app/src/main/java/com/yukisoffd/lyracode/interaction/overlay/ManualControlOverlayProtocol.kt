@@ -96,7 +96,7 @@ internal object ManualControlOverlayProtocol {
     private const val KEY_BEFORE_FINGERPRINT = "before_fingerprint"
     private const val KEY_AFTER_FINGERPRINT = "after_fingerprint"
 
-    fun encode(state: ManualControlState, fullAccess: Boolean = ManualControlController.fullAccessEnabled()): Bundle = Bundle().apply {
+    fun encode(state: ManualControlState, fullAccess: Boolean = ManualControlController.fullAccessEnabled(), context: Context? = null): Bundle = Bundle().apply {
         // Display metadata only. Incoming overlay commands are always rechecked in the main process.
         putBoolean("full_access", fullAccess)
         putString("pet_event", state.petEvent)
@@ -112,10 +112,20 @@ internal object ManualControlOverlayProtocol {
         putString("chat_model", state.chat.modelLabel)
         putString("chat_workspace", state.chat.workspaceLabel)
         putBoolean("chat_pure", state.chat.pureMode)
+        putBundle("compact_options", Bundle().apply {
+            putInt("width", state.chat.compactOptions.widthDp)
+            putInt("height", state.chat.compactOptions.heightDp)
+            putInt("transparency", state.chat.compactOptions.transparency)
+            putInt("blur", state.chat.compactOptions.blurDp)
+        })
         putString("agent_target", state.agentTargetPackage)
-        putParcelableArrayList("chat_messages", ArrayList(state.chat.messages.takeLast(16).map { message ->
-            Bundle().apply { putLong("id", message.id); putString("role", message.role); putString("text", message.text.takeLast(4000)); putString("thinking", message.thinking.takeLast(4000)); putString("tool_name", message.toolName.take(100)); putLong("created_at", message.createdAt) }
-        }))
+        if (context != null && state.chat.messages.isNotEmpty()) {
+            putString("chat_transcript", DeviceChatTranscriptStore.write(context, state.chat.messages))
+        } else {
+            putParcelableArrayList("chat_messages", ArrayList(state.chat.messages.map { message ->
+                Bundle().apply { putLong("id", message.id); putString("role", message.role); putString("text", message.text); putString("thinking", message.thinking); putString("tool_name", message.toolName); putLong("created_at", message.createdAt) }
+            }))
+        }
         putLong(EXTRA_ACTIVE_UNTIL, state.activeUntilEpochMillis)
         putString(KEY_STATUS, state.status.name)
         putString(KEY_TARGET_PACKAGE, state.targetPackage)
@@ -124,7 +134,11 @@ internal object ManualControlOverlayProtocol {
         state.lastResult?.let { putBundle(KEY_RESULT, encodeResult(it)) }
     }
 
-    fun decode(bundle: Bundle): ManualControlState? {
+    fun decode(bundle: Bundle, context: Context? = null): ManualControlState? {
+        val messages = bundle.getString("chat_transcript")?.let { name ->
+            if (context == null) return null
+            runCatching { DeviceChatTranscriptStore.read(context, name) }.getOrNull() ?: return null
+        } ?: decodeMessages(bundle)
         val status = enumValueOrNull<ManualControlStatus>(bundle.getString(KEY_STATUS)) ?: return null
         return ManualControlState(
             petEvent = bundle.getString("pet_event"),
@@ -139,9 +153,15 @@ internal object ManualControlOverlayProtocol {
                 modelLabel = bundle.getString("chat_model").orEmpty(),
                 workspaceLabel = bundle.getString("chat_workspace").orEmpty(),
                 pureMode = bundle.getBoolean("chat_pure"),
+                compactOptions = bundle.getBundle("compact_options").let { options ->
+                    com.yukisoffd.lyracode.interaction.model.CompactOverlayOptions(
+                        options?.getInt("width", 340) ?: 340, options?.getInt("height", 80) ?: 80,
+                        options?.getInt("transparency", 25) ?: 25, options?.getInt("blur", 24) ?: 24,
+                    ).normalized()
+                },
                 status = bundle.getString("chat_status").orEmpty(),
                 providerLabel = bundle.getString("chat_provider").orEmpty(),
-                messages = decodeMessages(bundle),
+                messages = messages,
             ),
             activeUntilEpochMillis = bundle.getLong(EXTRA_ACTIVE_UNTIL),
             status = status,
@@ -175,8 +195,8 @@ internal object ManualControlOverlayProtocol {
 
     @Suppress("DEPRECATION")
     private fun decodeMessages(bundle: Bundle) = bundle.getParcelableArrayList<Bundle>("chat_messages").orEmpty()
-        .takeLast(16).map { com.yukisoffd.lyracode.interaction.session.DeviceChatMessage(
-            it.getLong("id"), it.getString("role").orEmpty(), it.getString("text").orEmpty().takeLast(4000), it.getString("thinking").orEmpty().takeLast(4000), it.getString("tool_name").orEmpty().take(100), it.getLong("created_at", System.currentTimeMillis()),
+        .map { com.yukisoffd.lyracode.interaction.session.DeviceChatMessage(
+            it.getLong("id"), it.getString("role").orEmpty(), it.getString("text").orEmpty(), it.getString("thinking").orEmpty(), it.getString("tool_name").orEmpty(), it.getLong("created_at", System.currentTimeMillis()),
         ) }
 
     fun reportServiceState(context: Context, running: Boolean) {

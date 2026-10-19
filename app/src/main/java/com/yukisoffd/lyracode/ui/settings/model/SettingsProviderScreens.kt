@@ -217,7 +217,7 @@ internal fun apiFormatShortName(format: String): String = when (format) {
 }
 
 @Composable
-internal fun WebSearchSettings(
+internal fun WebSearchBlacklistSettings(
     settings: AppSettings,
     externalRevision: Int = 0,
     onChanged: () -> Unit,

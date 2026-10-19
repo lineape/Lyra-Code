@@ -603,7 +603,7 @@
     <string name="menu_sub_agents">子代理編排</string>
     <string name="menu_sub_agents_desc">選擇子代理模型並描述各自擅長的任務</string>
     <string name="menu_web_search">聯網搜尋</string>
-    <string name="menu_web_search_desc">配置網站黑名單，過濾垃圾或不可信來源</string>
+    <string name="menu_web_search_desc">設定 DeepSeek Search、DeepSeek Fetch 和網站黑名單</string>
     <string name="menu_workspace">工作目錄</string>
     <string name="menu_workspace_current">當前：%1$s</string>
     <string name="menu_termux">Termux</string>
@@ -965,9 +965,9 @@
     <string name="tool_run_command">執行命令</string>
     <string name="tool_run_command_desc">透過 Termux 執行命令並返回 stdout/stderr。</string>
     <string name="tool_web_search">聯網搜尋</string>
-    <string name="tool_web_search_desc">使用內嵌 WebView 搜尋網際網路。</string>
+    <string name="tool_web_search_desc">使用設定的後端搜尋網際網路，支援 DeepSeek Search。</string>
     <string name="tool_read_web_page">讀取網頁</string>
-    <string name="tool_read_web_page_desc">讀取 http/https 網頁正文。</string>
+    <string name="tool_read_web_page_desc">使用設定的後端讀取 HTTP/HTTPS 網頁，支援 DeepSeek Fetch。</string>
     <string name="tool_mark_web_sources">網頁來源標註</string>
     <string name="tool_mark_web_sources_desc">宣告網頁引用來源，並要求最終回答就近標註來源連結。</string>
     <string name="tool_manage_app_config">配置管理</string>
@@ -1279,7 +1279,7 @@
 
     <!-- Web Search -->
     <string name="title_domain_blacklist">網站黑名單</string>
-    <string name="blacklist_desc">AI 聯網搜尋和網頁讀取會跳過這些域名。普通域名精確匹配，* 萬用字元匹配子域名。</string>
+    <string name="blacklist_desc">應用內建搜尋和網頁讀取會跳過這些域名。普通域名精確匹配，* 萬用字元匹配子域名。此黑名單不對 DeepSeek Search 和 DeepSeek Fetch 生效。</string>
     <string name="label_one_domain_per_line">每行一個域名或 URL</string>
     <string name="blacklist_normalize_hint">儲存後會自動歸一化：移除協議、路徑和尾部斜槓，但保留 www.。例如 x.com 只匹配 x.com；*.x.com 匹配 www.x.com、news.x.com 等子域名；如需同時攔截根域名和全部子域名，請同時填寫 x.com 與 *.x.com。</string>
     <string name="notice_blacklist_saved">已儲存 %1$d 個黑名單域名</string>
@@ -2298,6 +2298,22 @@ Shizuku 與 Root：不屬於普通執行時許可權，由使用者在“系統�
     <string name="api_key_optional_hint">選填。本機模型或不需身分驗證的服務可留空。</string>
     <string name="floating_chat_without_accessibility">未啟用無障礙；懸浮對話與已授權的應用程式工具仍可使用。</string>
     <string name="floating_choose_workspace">選擇工作區</string>
+    <string name="floating_compact">精簡頁面 · AI 執行時可用</string>
+    <string name="floating_restore">恢復對話視窗</string>
+    <string name="floating_stop_output">停止輸出</string>
+    <string name="floating_thinking">正在思考</string>
+    <string name="floating_working">正在處理你的任務…</string>
+    <string name="floating_page_settings">懸浮頁設定</string>
+    <string name="floating_page_preview">精簡懸浮視窗 · 即時預覽</string>
+    <string name="floating_page_auto_save">變更會自動儲存，並立即套用至精簡懸浮視窗。</string>
+    <string name="floating_page_width">長度</string>
+    <string name="floating_page_height">高度</string>
+    <string name="floating_page_transparency">毛玻璃透明度</string>
+    <string name="floating_page_blur">模糊程度</string>
+    <string name="floating_page_reset">恢復預設</string>
+    <string name="floating_page_preview_status">使用工具 · 正在觀察螢幕</string>
+    <string name="floating_page_preview_body">正在檢查目前頁面，尋找下一步操作的入口…</string>
+    <string name="floating_page_scene">螢幕內容</string>
     <string name="floating_more">更多 · 切換模型</string>
     <string name="floating_input_hint">輸入訊息</string>
     <string name="floating_no_models">請先在設定中新增模型服務</string>
@@ -2419,6 +2435,19 @@ Shizuku 與 Root：不屬於普通執行時許可權，由使用者在“系統�
     <string name="sponsor_save_success">贊賞碼已儲存</string>
     <string name="sponsor_save_failed">無法儲存贊賞碼，請重試。</string>
     <string name="ui_native_svg_rendering">訊息及媒體預覽中的靜態 SVG 算繪</string>
+    <string name="deepseek_search_title">DeepSeek Search</string>
+    <string name="deepseek_fetch_title">DeepSeek Fetch</string>
+    <string name="deepseek_backend_enabled">已啟用 · 接管對應聯網工具</string>
+    <string name="deepseek_backend_disabled">未啟用 · 使用應用內建實作</string>
+    <string name="web_search_blacklist_scope">僅對應用內建搜尋和網頁讀取生效</string>
+    <string name="deepseek_enable_search">啟用 DeepSeek Search</string>
+    <string name="deepseek_enable_fetch">啟用 DeepSeek Fetch</string>
+    <string name="deepseek_search_description">啟用後，web_search 將使用 DeepSeek Search，網站黑名單不生效。</string>
+    <string name="deepseek_fetch_description">啟用後，read_web_page 將使用 DeepSeek Fetch，網站黑名單不生效。</string>
+    <string name="deepseek_invalid_url">請輸入不含使用者名稱、密碼、查詢參數和片段的 HTTP/HTTPS 基礎 URL。</string>
+    <string name="deepseek_key_required">請輸入有效的 DeepSeek API Key。</string>
+    <string name="deepseek_config_hint">請先儲存設定，再單獨啟用。開關狀態即時儲存；未設定時開關保持關閉且無法使用。API Key 安全儲存。</string>
+    <string name="deepseek_config_saved">設定已儲存</string>
 </resources>
 
 

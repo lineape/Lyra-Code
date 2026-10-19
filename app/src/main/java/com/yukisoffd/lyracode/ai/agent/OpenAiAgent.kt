@@ -17,6 +17,7 @@ import com.yukisoffd.lyracode.data.BackupManager
 import com.yukisoffd.lyracode.data.ChatMessage
 import com.yukisoffd.lyracode.data.ConversationStore
 import com.yukisoffd.lyracode.data.DeepSeekV3Tokenizer
+import com.yukisoffd.lyracode.data.messageTokenCosts
 import com.yukisoffd.lyracode.data.McpServerConfig
 import com.yukisoffd.lyracode.data.McpToolDefinition
 import com.yukisoffd.lyracode.data.MediaGenerationKind
@@ -3581,12 +3582,7 @@ class OpenAiAgent(
     }
 
     private fun ChatMessage.promptInputCost(): Long {
-        return when (role.lowercase()) {
-            "user" -> MESSAGE_WRAPPER_TOKENS + tokenizer.count(content)
-            "tool" -> MESSAGE_WRAPPER_TOKENS + tokenizer.count(content)
-            "assistant" -> MESSAGE_WRAPPER_TOKENS + estimatedAssistantOutputTokens(content, thinking, rawJson)
-            else -> MESSAGE_WRAPPER_TOKENS + tokenizer.count(content) + tokenizer.count(thinking)
-        }
+        return conversationStore.messageTokenCosts(this, tokenizer).prompt
     }
 
     private fun estimatedAssistantOutputTokens(content: String, thinking: String, rawJson: String?): Long {

@@ -58,6 +58,10 @@ data class ChatMessage(
     val tokensPerSecond: Double = 0.0,
     val deepSeekCacheHitRate: Double? = null,
     val createdAt: Long,
+    // -1 identifies synthetic context messages, which must never overwrite stored message costs.
+    val tokenRevision: Long = -1L,
+    val tokenCacheVersion: Int = 0,
+    val cachedTokenCosts: MessageTokenCosts? = null,
 )
 
 data class UsageMessageEvent(
@@ -80,8 +84,11 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
     appContext.applicationContext,
     if (inMemory) null else "lyra_conversations.db",
     null,
-    11,
+    12,
 ) {
+    // Do not lock this helper itself: SQLiteOpenHelper uses its monitor for ordinary database access.
+    internal val usageTokenIndexLock = Any()
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -126,6 +133,7 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
             """.trimIndent(),
         )
         createUsageTables(db)
+        createUsageTokenIndex(db)
     }
 
     private fun createUsageTables(db: SQLiteDatabase) {
@@ -242,6 +250,7 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
         if (oldVersion < 11) {
             db.execSQL("ALTER TABLE messages ADD COLUMN deepseek_cache_hit_rate REAL NOT NULL DEFAULT -1")
         }
+        if (oldVersion < 12) createUsageTokenIndex(db)
     }
 
     fun createConversation(
@@ -822,33 +831,7 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
         conversationId?.let { setConversationMeta(it) }
     }
 
-    fun message(id: Long): ChatMessage? {
-        return readableDatabase.query(
-            "messages",
-            arrayOf("id", "conversation_id", "role", "content", "thinking", "profile_id", "model", "tool_call_id", "raw_json", "tokens_per_second", "deepseek_cache_hit_rate", "created_at"),
-            "id=?",
-            arrayOf(id.toString()),
-            null,
-            null,
-            null,
-        ).use {
-            if (!it.moveToFirst()) return null
-            ChatMessage(
-                id = it.getLong(0),
-                conversationId = it.getLong(1),
-                role = it.getString(2),
-                content = it.getString(3),
-                thinking = it.getString(4),
-                profileId = it.getString(5),
-                model = it.getString(6),
-                toolCallId = if (it.isNull(7)) null else it.getString(7),
-                rawJson = if (it.isNull(8)) null else it.getString(8),
-                tokensPerSecond = it.getDouble(9),
-                deepSeekCacheHitRate = it.getDouble(10).takeIf { rate -> rate >= 0.0 },
-                createdAt = it.getLong(11),
-            )
-        }
-    }
+    fun message(id: Long): ChatMessage? = readMessages("id=?", arrayOf(id.toString())).firstOrNull()
 
     fun deleteMessagesAfter(conversationId: Long, messageId: Long) {
         writableDatabase.delete(
@@ -1078,6 +1061,10 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
 
     fun messages(conversationId: Long): List<ChatMessage> {
         repairInlineMediaAttachments(conversationId)
+        return readMessages("conversation_id=?", arrayOf(conversationId.toString()))
+    }
+
+    private fun readMessages(selection: String, selectionArgs: Array<String>): List<ChatMessage> {
         val cursor = readableDatabase.query(
             "messages",
             arrayOf(
@@ -1096,9 +1083,13 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
                 "created_at",
                 "length(thinking)",
                 "length(raw_json)",
+                "token_revision",
+                "token_version",
+                "prompt_tokens",
+                "output_tokens",
             ),
-            "conversation_id=?",
-            arrayOf(conversationId.toString()),
+            selection,
+            selectionArgs,
             null,
             null,
             "id ASC",
@@ -1126,6 +1117,9 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
                             tokensPerSecond = it.getDouble(10),
                             deepSeekCacheHitRate = it.getDouble(11).takeIf { rate -> rate >= 0.0 },
                             createdAt = it.getLong(12),
+                            tokenRevision = it.getLong(15),
+                            tokenCacheVersion = it.getInt(16),
+                            cachedTokenCosts = if (it.getInt(16) == 0) null else MessageTokenCosts(it.getLong(17), it.getLong(18)),
                         ),
                     )
                 }

@@ -28,9 +28,23 @@ for MODE in seccomp no-seccomp; do
     "$P" -l "$BASE/test-fork"
     echo "$MODE: LINK_EXE_EXECVEAT_NOFOLLOW_FORK_OK"
 
+    # Exercise raw fork, including the child's preserved argument registers.
+    STATUS=0
+    "$P" -l "$BASE/fork_regs" || STATUS=$?
+    if [ "$STATUS" = 125 ]; then
+        echo "$MODE: SKIP raw fork (ABI has no fork syscall)"
+    else
+        test "$STATUS" = 0
+        # Also force SIGSYS in adb-shell contexts without the app's policy.
+        /system/bin/linker64 "$BASE/fork_regs" trap "$P" -l "$BASE/fork_regs"
+        echo "$MODE: FORK_REGISTERS_OK"
+    fi
+
     ROOT="$CASE/rootfs"
     mkdir -p "$ROOT/bin" "$ROOT/work" "$ROOT/tmp"
-    cp "$BASE/test-upstream" "$BASE/test-571fb953" "$BASE/fchmodat2" "$BASE/open_tree" "$ROOT/bin/"
+    # Match the app: keep backing links beside files inside the guest rootfs.
+    unset PROOT_L2S_DIR
+    cp "$BASE/test-upstream" "$BASE/test-latest" "$BASE/test-571fb953" "$BASE/fchmodat2" "$BASE/open_tree" "$ROOT/bin/"
     guest() {
         "$P" -r "$ROOT" -b /system -b /apex -b /proc -b /dev -w /work "$@"
     }
@@ -42,6 +56,10 @@ for MODE in seccomp no-seccomp; do
     # Ensure AT_EMPTY_PATH changed the guest cwd, leaving the launch cwd alone.
     test "$(stat -c %Y "$BASE")" != 123456789
     test "$(stat -c %Y "$ROOT/work")" = 123456789
+
+    # These checks create files and therefore change the working directory mtime.
+    guest -0 -l --sysvipc /bin/test-latest 0 0
+    guest -i 123456:234567 -l --sysvipc /bin/test-latest 123456 234567
 
     # SO_PEERCRED must translate peers in another PRoot instance.
     guest -0 /bin/test-upstream server /work/peer 0 0 &

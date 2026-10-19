@@ -5,6 +5,17 @@ import org.junit.Test
 
 class UsageStatisticsTest {
     @Test
+    fun aggregatesAlreadyGroupedRequestCounts() {
+        val result = aggregateModelUsage(listOf(
+            ModelUsageSample("provider/model", 100, 20, requestCount = 12),
+            ModelUsageSample("MODEL", 200, 30, requestCount = 8),
+        )).single()
+        assertEquals(20, result.requestCount)
+        assertEquals(300L, result.inputTokens)
+        assertEquals(50L, result.outputTokens)
+    }
+
+    @Test
     fun aggregatesRequestsByModelNameAcrossProviders() {
         val result = aggregateModelUsage(
             listOf(

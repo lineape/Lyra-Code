@@ -24,9 +24,9 @@ $helpers = Join-Path $build 'runtime-tests'
 New-Item -ItemType Directory -Force $helpers | Out-Null
 $compiler = Join-Path $NdkPath 'toolchains/llvm/prebuilt/windows-x86_64/bin/clang.exe'
 $names = @('puts_proc_self_exe', 'execveat', 'open_nofollow', 'test-fork',
-    'test-upstream', 'fchmodat2', 'open_tree', 'test-571fb953')
+    'test-upstream', 'test-latest', 'fork_regs', 'fchmodat2', 'open_tree', 'test-571fb953')
 foreach ($name in $names) {
-    $inputFile = if ($name -in @('test-fork', 'test-upstream')) { "$PSScriptRoot/$name.c" } else { "$source/tests/$name.c" }
+    $inputFile = if ($name -in @('test-fork', 'test-upstream', 'test-latest')) { "$PSScriptRoot/$name.c" } else { "$source/tests/$name.c" }
     & $compiler "--target=$target" -O2 -fPIE -pie $inputFile -o "$helpers/$name"
     if ($LASTEXITCODE -ne 0) { throw "Compile failed: $name" }
 }

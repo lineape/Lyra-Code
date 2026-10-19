@@ -29,12 +29,22 @@ import com.yukisoffd.lyracode.interaction.service.ManualControlCommandService
 import com.yukisoffd.lyracode.interaction.session.ManualControlController
 import com.yukisoffd.lyracode.interaction.session.ManualControlState
 import com.yukisoffd.lyracode.interaction.session.ManualControlStatus
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /** Hosts the overlay in a process that has no background Activity or Compose runtime. */
 class ManualControlForegroundService : Service() {
     private lateinit var overlayHandler: Handler
     private var taskHud: TaskHudController? = null
     private var lastRenderedState: ManualControlState? = null
+    private val renderScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val renderMutex = Mutex()
     private var sessionWakeLock: PowerManager.WakeLock? = null
     private var screenReceiverRegistered = false
     private val screenReceiver = object : android.content.BroadcastReceiver() {
@@ -110,14 +120,18 @@ class ManualControlForegroundService : Service() {
                 val sentAt = intent.getLongExtra(ManualControlOverlayProtocol.EXTRA_SENT_AT_ELAPSED, 0L)
                 val transportMillis = if (sentAt > 0L) SystemClock.elapsedRealtime() - sentAt else -1L
                 val encodedState = intent.getBundleExtra(ManualControlOverlayProtocol.EXTRA_STATE)
-                overlayHandler.post {
-                    val state = encodedState?.let(ManualControlOverlayProtocol::decode)
-                    if (state == null) {
-                        Log.w(LOG_TAG, "Ignoring invalid overlay state")
-                    } else {
-                        Log.i(LOG_TAG, "overlay_state_received transport_ms=$transportMillis")
-                        scheduleExpiry(state.activeUntilEpochMillis)
-                        renderOverlayState(state)
+                renderScope.launch {
+                    renderMutex.withLock {
+                        val state = withContext(Dispatchers.IO) {
+                            encodedState?.let { ManualControlOverlayProtocol.decode(it, applicationContext) }
+                        }
+                        if (state == null) {
+                            Log.w(LOG_TAG, "Ignoring invalid overlay state")
+                        } else {
+                            Log.i(LOG_TAG, "overlay_state_received transport_ms=$transportMillis")
+                            scheduleExpiry(state.activeUntilEpochMillis)
+                            renderOverlayState(state)
+                        }
                     }
                 }
             }
@@ -131,6 +145,7 @@ class ManualControlForegroundService : Service() {
 
     override fun onDestroy() {
         destroyed = true
+        renderScope.cancel()
         if (screenReceiverRegistered) { applicationContext.unregisterReceiver(screenReceiver); screenReceiverRegistered = false }
         if (::overlayHandler.isInitialized) {
             overlayHandler.removeCallbacksAndMessages(null)

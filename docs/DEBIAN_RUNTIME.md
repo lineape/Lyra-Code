@@ -35,9 +35,9 @@ Android app uninstall or clear-data still removes every app-private rootfs. Root
 
 ## PRoot source and license
 
-The bundled ARM64 PRoot executable and loader are GPL-2.0-or-later. Lyra Code exercises the later-version option and distributes them under GPLv3 alongside the AGPL-v3 application. Corresponding source is maintained at <https://github.com/Soffd/proot>; its upstream chain is `Soffd/proot` → `termux/proot` → `proot-me/proot`. The binary distribution snapshot and both SHA-256 values are recorded in the in-app **Open Source Licenses** page and in `THIRD_PARTY_NOTICES.md`, together with the complete GPLv3 terms.
+The bundled ARM64 and x86_64 PRoot executables and loaders are GPL-2.0-or-later. Lyra Code exercises the later-version option and distributes them under GPLv3 alongside the AGPL-v3 application. Corresponding source is maintained at <https://github.com/Soffd/proot>; its upstream chain is `Soffd/proot` → `termux/proot` → `proot-me/proot`. The binary distribution snapshot and all four SHA-256 values are recorded in the in-app **Open Source Licenses** page and in `THIRD_PARTY_NOTICES.md`, together with the complete GPLv3 terms.
 
-The two verified ARM64 ELF files are stored in `app/src/debianRuntime/jniLibs/arm64-v8a` and are consumed directly by the Android build. Builds do not contact RikkaHub and fail if either local file is missing or its fixed SHA-256 value changes. See the adjacent `jniLibs/README.md` for provenance and the checklist for replacing them with a cross-compiled build from the local `Soffd/proot` checkout.
+The verified ELF pairs are stored in `app/src/debianRuntime/jniLibs/arm64-v8a` and `app/src/debianRuntime/jniLibs/x86_64` and are consumed directly by the Android build. Builds do not contact RikkaHub and fail if any local file is missing or its fixed SHA-256 value changes. See the adjacent `jniLibs/README.md` for provenance and instructions for replacing them with a cross-compiled build from the local `Soffd/proot` checkout. The matching source and Android regression helpers are included in `proot_src/`.
 
 ## Agent and terminal behavior
 

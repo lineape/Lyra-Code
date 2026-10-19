@@ -3,8 +3,6 @@ package com.yukisoffd.lyracode.data
 import android.content.Context
 import com.yukisoffd.lyracode.canonicalModelName
 import com.yukisoffd.lyracode.R
-import org.json.JSONArray
-import org.json.JSONObject
 import java.util.Calendar
 import java.util.Locale
 
@@ -43,6 +41,7 @@ internal data class ModelUsageSample(
     val modelName: String,
     val inputTokens: Long,
     val outputTokens: Long,
+    val requestCount: Int = 1,
 )
 
 internal fun aggregateModelUsage(samples: List<ModelUsageSample>): List<ModelUsageStat> {
@@ -63,7 +62,7 @@ internal fun aggregateModelUsage(samples: List<ModelUsageSample>): List<ModelUsa
         if (aggregate.displayName.isBlank() && displayName.isNotBlank()) {
             aggregate.displayName = displayName
         }
-        aggregate.requestCount++
+        aggregate.requestCount += sample.requestCount
         aggregate.inputTokens += sample.inputTokens.coerceAtLeast(0L)
         aggregate.outputTokens += sample.outputTokens.coerceAtLeast(0L)
     }
@@ -87,128 +86,34 @@ class UsageStatisticsRepository(
     context: Context,
     private val conversationStore: ConversationStore,
 ) {
-    private val tokenizer = DeepSeekV3Tokenizer.get(context)
+    private val appContext = context.applicationContext
+    private val tokenizer by lazy { DeepSeekV3Tokenizer.get(appContext) }
 
-    fun calculate(period: UsageStatsPeriod, anchorAt: Long = System.currentTimeMillis()): UsageStatsSummary {
+    fun calculate(
+        period: UsageStatsPeriod,
+        anchorAt: Long = System.currentTimeMillis(),
+        checkCancelled: () -> Unit = {},
+    ): UsageStatsSummary {
         val range = periodRange(period, anchorAt)
-        val conversationsWithUserInput = linkedSetOf<Long>()
-        var userInputTokens = 0L
-        var aiOutputTokens = 0L
-        var userMessageCount = 0
-        var assistantMessageCount = 0
-        var toolMessageCount = 0
-        var modelRequestCount = 0
-        val modelUsageSamples = mutableListOf<ModelUsageSample>()
-
-        conversationStore.usageMessageEvents(range.first, range.second).forEach { event ->
-            when (event.role.lowercase()) {
-                "user" -> {
-                    conversationsWithUserInput += event.conversationId
-                    userMessageCount++
-                }
-                "tool" -> toolMessageCount++
-                "assistant" -> assistantMessageCount++
-            }
-        }
-
-        conversationStore.usageModelRequests(range.first, range.second).forEach { request ->
-            userInputTokens += request.inputTokens
-            aiOutputTokens += request.outputTokens
-            modelRequestCount++
-            modelUsageSamples += ModelUsageSample(
-                modelName = request.model,
-                inputTokens = request.inputTokens,
-                outputTokens = request.outputTokens,
-            )
-        }
-
-        val recordedAssistantIds = conversationStore.usageModelRequestMessageIds()
-        conversationStore.conversations(includeSubAgents = true).forEach { conversation ->
-            var repeatedContextTokens = 0L
-            conversationStore.messages(conversation.id).forEach { message ->
-                when (message.role.lowercase()) {
-                    "user", "tool" -> repeatedContextTokens += message.promptInputCost()
-                    "assistant" -> {
-                        val inRange = message.createdAt >= range.first && message.createdAt < range.second
-                        if (inRange && message.id !in recordedAssistantIds) {
-                            val estimatedInputTokens = REQUEST_STATIC_INPUT_TOKENS + repeatedContextTokens
-                            val estimatedOutputTokens = message.assistantOutputCost()
-                            modelRequestCount++
-                            userInputTokens += estimatedInputTokens
-                            aiOutputTokens += estimatedOutputTokens
-                            modelUsageSamples += ModelUsageSample(
-                                modelName = message.model,
-                                inputTokens = estimatedInputTokens,
-                                outputTokens = estimatedOutputTokens,
-                            )
-                        }
-                        repeatedContextTokens += message.promptInputCost()
-                    }
-                }
-            }
-        }
-
+        conversationStore.prepareLegacyUsage(range.first, range.second, { tokenizer }, checkCancelled)
+        checkCancelled()
+        val counts = conversationStore.usageEventCounts(range.first, range.second)
+        val samples = conversationStore.usageTokenSamples(range.first, range.second)
+        checkCancelled()
         return UsageStatsSummary(
             period = period,
             startAt = range.first,
             endAt = range.second,
-            conversationCount = conversationsWithUserInput.size,
-            userInputTokens = userInputTokens,
-            aiOutputTokens = aiOutputTokens,
-            userMessageCount = userMessageCount,
-            assistantMessageCount = assistantMessageCount,
-            toolMessageCount = toolMessageCount,
-            modelRequestCount = modelRequestCount,
-            modelUsage = aggregateModelUsage(modelUsageSamples),
+            conversationCount = counts.conversations,
+            userInputTokens = samples.sumOf { it.inputTokens },
+            aiOutputTokens = samples.sumOf { it.outputTokens },
+            userMessageCount = counts.users,
+            assistantMessageCount = counts.assistants,
+            toolMessageCount = counts.tools,
+            modelRequestCount = samples.sumOf { it.requestCount },
+            modelUsage = aggregateModelUsage(samples),
         )
     }
-    private fun ChatMessage.promptInputCost(): Long {
-        return when (role.lowercase()) {
-            "user" -> MESSAGE_WRAPPER_TOKENS + tokenizer.count(content)
-            "tool" -> MESSAGE_WRAPPER_TOKENS + tokenizer.count(content)
-            "assistant" -> MESSAGE_WRAPPER_TOKENS + assistantOutputCost()
-            else -> MESSAGE_WRAPPER_TOKENS + tokenizer.count(content) + tokenizer.count(thinking)
-        }
-    }
-
-    private fun ChatMessage.assistantOutputCost(): Long {
-        return tokenizer.count(content) +
-            tokenizer.count(thinking) +
-            tokenizer.count(toolCallsOutputText(rawJson))
-    }
-
-    private fun toolCallsOutputText(rawJson: String?): String {
-        val raw = rawJson?.takeIf { it.isNotBlank() }
-            ?.let { runCatching { JSONObject(it) }.getOrNull() }
-            ?: return ""
-        val calls = raw.optJSONArray("tool_calls") ?: return ""
-        return buildString {
-            for (index in 0 until calls.length()) {
-                val call = calls.optJSONObject(index) ?: continue
-                appendToolCallOutput(call)
-                append('\n')
-            }
-        }
-    }
-
-    private fun StringBuilder.appendToolCallOutput(call: JSONObject) {
-        val function = call.optJSONObject("function")
-        if (function != null) {
-            append(function.optString("name"))
-            append('\n')
-            append(function.optString("arguments"))
-            return
-        }
-        append(call.optString("name"))
-        append('\n')
-        val input = call.opt("input")
-        when (input) {
-            is JSONObject, is JSONArray -> append(input.toString())
-            null -> append(call.toString())
-            else -> append(input.toString())
-        }
-    }
-
     private fun periodRange(period: UsageStatsPeriod, anchorAt: Long): Pair<Long, Long> {
         if (period == UsageStatsPeriod.TOTAL) return Long.MIN_VALUE to Long.MAX_VALUE
         val start = Calendar.getInstance().apply {
@@ -237,8 +142,4 @@ class UsageStatisticsRepository(
         return start.timeInMillis to end.timeInMillis
     }
 
-    private companion object {
-        private const val REQUEST_STATIC_INPUT_TOKENS = 1024L
-        private const val MESSAGE_WRAPPER_TOKENS = 8L
-    }
 }

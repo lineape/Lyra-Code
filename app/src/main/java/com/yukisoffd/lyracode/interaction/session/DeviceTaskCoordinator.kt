@@ -105,7 +105,7 @@ internal object DeviceTaskCoordinator {
         val userMessage = DeviceChatMessage(-System.nanoTime(), "user", input)
         ManualControlController.clearSelection()
         ManualControlController.updateChat(current.chat.copy(
-            messages = (current.chat.messages + userMessage).takeLast(16), running = true,
+            messages = current.chat.messages + userMessage, running = true,
             status = "思考中", providerLabel = "${profile.name} · ${profile.selectedModel}",
             modelLabel = profile.selectedModel, pureMode = settings.purePromptMode,
         ), target)
@@ -142,10 +142,10 @@ internal object DeviceTaskCoordinator {
                         val message = DeviceChatMessage(eventId, "tool", result, toolName = name, createdAt = chat.messages.firstOrNull { it.id == eventId }?.createdAt ?: System.currentTimeMillis())
                         chat.copy(messages = if (chat.messages.any { it.id == eventId })
                             chat.messages.map { if (it.id == eventId) message else it }
-                            else (chat.messages + message).takeLast(16))
+                            else chat.messages + message)
                     } },
                     onFinish = { summary -> update(token) {
-                        it.copy(messages = (it.messages + DeviceChatMessage(-System.nanoTime(), "assistant", summary)).takeLast(16))
+                        it.copy(messages = it.messages + DeviceChatMessage(-System.nanoTime(), "assistant", summary))
                     } },
                 )
                 val agent = DeviceAgentFactory.create(app, settings, store, floatingWorkspace ?: settings.workspaceUri)
@@ -172,9 +172,9 @@ internal object DeviceTaskCoordinator {
                         update(token) { chat ->
                             val messages = if (delta.content.isBlank() && delta.thinking.isBlank()) chat.messages else {
                                 val messageId = token * 1_000_000L + delta.messageId
-                                val message = DeviceChatMessage(messageId, "assistant", delta.content.takeLast(4000), thinking = delta.thinking.takeLast(4000), createdAt = chat.messages.firstOrNull { it.id == messageId }?.createdAt ?: System.currentTimeMillis())
+                                val message = DeviceChatMessage(messageId, "assistant", delta.content, thinking = delta.thinking, createdAt = chat.messages.firstOrNull { it.id == messageId }?.createdAt ?: System.currentTimeMillis())
                                 if (chat.messages.any { it.id == messageId }) chat.messages.map { if (it.id == messageId) message else it }
-                                else (chat.messages + message).takeLast(16)
+                                else chat.messages + message
                             }
                             chat.copy(messages = messages, status = if (ManualControlController.state.value.selection != null)
                                 chat.status else delta.status.take(240))

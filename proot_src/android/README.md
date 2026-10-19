@@ -30,7 +30,7 @@ There is no compiled package-specific or Termux fallback path. A missing loader
 produces an explicit error instead of silently attempting another package's
 private directory.
 
-## Dual-ABI build (Lyra .4)
+## Dual-ABI build (Lyra .5)
 
 From the checkout root:
 
@@ -86,8 +86,24 @@ The .4 build adds all nine October upstream commits to main, in order:
 
 Android CMake links the external ARM64 loader at the new LOADER_ADDRESS from
 src/arch.h; the x86_64 address is unchanged. The embedded runtime version is
-`5.1.107.100-lyra.4`. The Lyra external-loader lookup, API 24 baseline and
+`5.1.107.100-lyra.5`. The Lyra external-loader lookup, API 24 baseline and
 static talloc are preserved. No app launch arguments need to change.
+
+## Lyra .5 upstream integration (2026-10-19)
+
+All 21 commits from `9688d01` through `e2d843e`, inclusive, are applied on
+main in upstream order. The complete SHA list is in UPSTREAM_COMMITS.md.
+This update fixes descriptor queries, simulated hard-link counts, SysV shared
+memory allocation through memfd, statx group mapping, and raw fork fallback
+under Android's outer seccomp policy, including child register restoration.
+It also carries the upstream USERLAND metadata fixes for chmod, ACLs, chown,
+statx, empty-path fstatat, renameat2 and orphaned records. USERLAND stays
+disabled, as in the previous Lyra packages; enabling it would change the
+rootfs metadata format and is outside this integration.
+
+Both ABI pairs retain the external-loader lookup, fixed loader addresses,
+API 24 baseline, static talloc and 16 KB ELF alignment. The loader sources are
+unchanged, so the rebuilt loader hashes are identical to the .4 packages.
 
 ## Android runtime regression checks
 
@@ -121,6 +137,11 @@ system, 80 concurrent posix_spawn calls across four threads, and sibling-loader
 discovery. It also checks full-width fake IDs, regular-file and memfd read-only
 reopens, namespace-map reads, guest-cwd empty paths and statx, cross-instance
 SO_PEERCRED, fd-mount fallback, fchmodat2 and Unix datagram sends/replies/restarts.
+The latest helper additionally checks pipes, sockets, anonymous descriptors,
+deleted files, fake IDs through fstat/fstatat/statx, simulated hard-link counts,
+and SysV shared memory shared across mappings and fork. The upstream fork_regs
+helper verifies parent and child registers with an explicitly trapping outer
+filter on x86_64; ABIs without a raw fork syscall report a skip.
 The ARM64 helper additionally reserves 256, 300 and 330 GiB with mmap.
 Unavailable kernel features and denied memfd reopens are explicitly reported
 as skipped. See VALIDATION.md for the checks performed for this revision and

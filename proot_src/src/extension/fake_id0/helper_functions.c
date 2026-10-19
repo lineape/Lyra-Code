@@ -12,8 +12,6 @@
 #include "extension/fake_id0/config.h"
 #include "extension/fake_id0/helper_functions.h"
 
-#define META_TAG ".proot-meta-file."
-
 #define OWNER_PERMS	 0
 #define GROUP_PERMS	 1
 #define OTHER_PERMS	 2
@@ -95,6 +93,32 @@ int get_fd_path(Tracee *tracee, char path[PATH_MAX], Reg fd_sysarg, RegVersion v
 		return 1;
 
 	return 0;
+}
+
+/** A path through /proc/<pid>/fd/<n>, or /proc/self/fd/<n> (the
+ *  tracee's), stands for the file that descriptor is open on, whose meta
+ *  file isn't under /proc. Replaces path with that file's and returns 0,
+ *  or 1 if it isn't in the guestfs; returns -1 for any other path.
+ */
+int resolve_proc_fd_path(Tracee *tracee, char path[PATH_MAX])
+{
+	char target[PATH_MAX];
+	unsigned long pid, fd;
+	int end = 0;
+
+	if (sscanf(path, "/proc/self/fd/%lu%n", &fd, &end) == 1 && end > 0 && path[end] == '\0')
+		pid = tracee->pid;
+	else {
+		end = 0;
+		if (sscanf(path, "/proc/%lu/fd/%lu%n", &pid, &fd, &end) != 2
+		    || end == 0 || path[end] != '\0')
+			return -1;
+	}
+
+	if (readlink_proc_pid_fd(pid, fd, target) < 0 || target[0] != '/')
+		return -1;
+	strcpy(path, target);
+	return belongs_to_guestfs(tracee, path) ? 0 : 1;
 }
 
 /** Reads a path from path_sysarg into path.
@@ -282,7 +306,18 @@ int get_dir_path(char path[PATH_MAX], char dir_path[PATH_MAX])
  */
 int get_meta_path(char orig_path[PATH_MAX], char meta_path[PATH_MAX]) 
 {
+	char trimmed[PATH_MAX];
 	char *filename;
+	size_t length;
+
+	/* "dir/" names "dir", not an empty name inside its parent.  */
+	length = strlen(orig_path);
+	if (length >= PATH_MAX)
+		return -ENAMETOOLONG;
+	strcpy(trimmed, orig_path);
+	while (length > 1 && trimmed[length - 1] == '/')
+		trimmed[--length] = '\0';
+	orig_path = trimmed;
 
 	/*Separate the final component from the path. */
 	get_dir_path(orig_path, meta_path);

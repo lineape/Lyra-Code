@@ -3,6 +3,7 @@ package com.yukisoffd.lyracode
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +46,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.yukisoffd.lyracode.data.AppSettings
 import com.yukisoffd.lyracode.data.NewApiAccountClient
@@ -89,6 +93,12 @@ internal fun MengxiAccountPage(settings: AppSettings, initialNotice: String, onS
             if (signOut && !account.isLoggedIn) onSignedOut()
         }
     }
+    LaunchedEffect(account) {
+        if (account.isLoggedIn) {
+            val entryNotice = notice
+            runAction { account.refreshUser(); entryNotice }
+        }
+    }
     if (showLogin) NewApiLoginDialog(settings, onServicesChanged,
         onAuthenticated = { message -> showLogin = false; notice = message; failed = false; revision++ },
         onDismiss = { showLogin = false })
@@ -129,13 +139,19 @@ internal fun MengxiAccountPage(settings: AppSettings, initialNotice: String, onS
                 }
                 Icon(Icons.Default.CheckCircle, uiText(R.string.mengxi_connected), tint = MaterialTheme.colorScheme.primary)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 AccountPill("ID ${user.optString("id")}")
                 user.optString("group").takeIf { it.isNotBlank() }?.let { AccountPill(it) }
-            }
-            user.optString("email").takeIf { it.isNotBlank() }?.let { email ->
-                SelectionContainer {
-                    Text(email, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                user.optString("email").takeIf { it.isNotBlank() }?.let { email ->
+                    SelectionContainer(Modifier.weight(1f)) {
+                        Text(email, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
         }
@@ -145,8 +161,7 @@ internal fun MengxiAccountPage(settings: AppSettings, initialNotice: String, onS
                     Icon(Icons.Default.AccountBalanceWallet, null, Modifier.size(20.dp))
                     Text(uiText(R.string.new_api_quota), style = MaterialTheme.typography.labelLarge)
                 }
-                Text(uiText(R.string.mengxi_coin_amount, formatMengxiQuota(user.optLong("quota"))),
-                    style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
+                AccountQuotaText(uiText(R.string.mengxi_coin_amount, formatMengxiQuota(user.optLong("quota"))))
                 Text(uiText(R.string.mengxi_quota_units, NumberFormat.getIntegerInstance().format(user.optLong("quota"))),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f))
             }
@@ -194,6 +209,17 @@ internal fun MengxiAccountPage(settings: AppSettings, initialNotice: String, onS
             Text(uiText(R.string.new_api_logout), color = MaterialTheme.colorScheme.error)
         }
         Text(uiText(R.string.new_api_logout_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+private fun AccountQuotaText(value: String) {
+    val style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold)
+    val textMeasurer = rememberTextMeasurer()
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val textWidth = textMeasurer.measure(value, style, softWrap = false, maxLines = 1).size.width
+        val scale = if (textWidth > 0) minOf(1f, constraints.maxWidth.toFloat() / textWidth) else 1f
+        Text(value, style = style.copy(fontSize = style.fontSize * scale), maxLines = 1, softWrap = false)
     }
 }
 

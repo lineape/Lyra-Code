@@ -1,7 +1,7 @@
 # Bundled PRoot runtime
 
 Every APK contains ARM64 and x86_64 executable/loader pairs built locally from
-Soffd/proot main commit `683e77029a47a26894347c5a3fbce74450aeb37e`.
+Soffd/proot main commit `d66f7e61e7841c38e52e1d3ee2ee2cca39c54e72`.
 The source retains `7266fb3` (link-directory pinning) and includes these previous five
 upstream commits, cherry-picked in order with their original IDs recorded:
 
@@ -23,12 +23,19 @@ The October update additionally includes all nine requested upstream commits:
 - `254202b`: open_tree translation and fd-mount ENOSYS fallback.
 - `b8c1f5c`: Unix datagram destinations, replies and restarted sends.
 
-Remote master was verified at `b8c1f5c` on 2026-10-13. The local master branch
+The October 19 update also integrates all 21 master commits from `9688d01`
+through `e2d843e`, including both endpoints. They cover descriptor stat queries,
+hard-link counts, memfd-backed SysV shared memory, statx group mapping, raw
+fork fallback under Android seccomp, and USERLAND ownership/permission records.
+USERLAND remains disabled to preserve the existing rootfs metadata behavior.
+The full SHA list is in `proot_src/android/UPSTREAM_COMMITS.md`.
+
+Remote master was verified at `e2d843e` on 2026-10-19. The local master branch
 was not modified. `proot_src/` is the Git-free source copy of this main revision.
 
 ## Binary provenance
 
-- Version: `5.1.107.100-lyra.4`
+- Version: `5.1.107.100-lyra.5`
 - NDK: `29.0.14206865`, Clang 21; CMake 3.22.1, Ninja
 - Targets: `aarch64-linux-android24`, `x86_64-linux-android24`
 - Static dependency: vendored talloc 2.5.0
@@ -78,7 +85,7 @@ Keep the corresponding source and build material available to binary recipients
 under the selected GPLv3 terms; talloc is LGPL-3.0-or-later.
 
 ## SHA-256
-- `arm64-v8a/libproot_exec.so`: `ce41048eb45feb85862e273be648b1820f3747a4226fdfe8217272bcf0933597`
+- `arm64-v8a/libproot_exec.so`: `be2fbd3a0e88c0d159ef6cd044392720ea3f0bc1ee524bf67879d49f5e9b9eb4`
 - `arm64-v8a/libproot_loader.so`: `825d0362db3319c2b3ed3b75fe300287c0f9eeb7f2427ceb05a4a004ad33ed12`
-- `x86_64/libproot_exec.so`: `508c63bb10cc4209daa33f58f8b41bcfd344cd43fd929339e927b12b1957f8af`
+- `x86_64/libproot_exec.so`: `5f4dc068cb80fa23713573f14105d597c225e8d56ace3b4d0a77c87824710dad`
 - `x86_64/libproot_loader.so`: `61b2dd1a858caddbab4647c519cfe0c23bbd2d47981358b9cc6ae818e79e6869`

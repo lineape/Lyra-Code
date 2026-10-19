@@ -69,6 +69,8 @@ import com.yukisoffd.lyracode.data.UsageStatisticsRepository
 import com.yukisoffd.lyracode.data.UsageStatsPeriod
 import com.yukisoffd.lyracode.data.UsageStatsSummary
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -101,8 +103,11 @@ internal fun UsageStatsScreen(
         loading = true
         error = ""
         val result = withContext(Dispatchers.IO) {
+            val calculationContext = currentCoroutineContext()
             runCatching {
-                UsageStatisticsRepository(context, controller.usageStore()).calculate(selectedPeriod, anchorAt)
+                UsageStatisticsRepository(context, controller.usageStore()).calculate(selectedPeriod, anchorAt) {
+                    calculationContext.ensureActive()
+                }
             }
         }
         result.fold(

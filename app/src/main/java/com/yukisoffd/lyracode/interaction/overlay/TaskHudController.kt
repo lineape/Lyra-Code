@@ -1,16 +1,20 @@
 package com.yukisoffd.lyracode.interaction.overlay
 
 import android.content.Context
+import android.app.Dialog
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PixelFormat
+import android.graphics.drawable.GradientDrawable
 import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.view.Window
 import android.widget.FrameLayout
+import com.yukisoffd.lyracode.R
 import com.yukisoffd.lyracode.interaction.model.ScreenBounds
 import com.yukisoffd.lyracode.interaction.session.ManualControlState
 import com.yukisoffd.lyracode.interaction.session.ManualControlStatus
@@ -40,6 +44,9 @@ internal class TaskHudController(
     private var chatVisible = true
     private var shownApproval: String? = null
     private var panelHost: FrameLayout? = null
+    private var panelWindow: Dialog? = null
+    private var blurListenerRegistered = false
+    private val blurListener = java.util.function.Consumer<Boolean> { updateWindowBackground() }
     private var chatPanel: DeviceChatPanel? = null
     private var inputFocused = false
     private var highlight: HighlightView? = null
@@ -49,6 +56,7 @@ internal class TaskHudController(
     private var lastPanelSignature: PanelSignature? = null
     private var panelTouchActive = false
     private var expanded = true
+    private var compactRect: OverlayRect? = null
     private var panelX = dp(12)
     private var panelY = dp(96)
     private var panelWidth = minOf(dp(340), context.resources.displayMetrics.widthPixels - dp(24))
@@ -64,14 +72,21 @@ internal class TaskHudController(
             (bounds.width() - bars.left - bars.right - dp(12)).coerceAtLeast(1), (bottom - top).coerceAtLeast(1))
     }
 
-    private fun visibleRect() = OverlayGeometry.fit(OverlayRect(panelX, panelY, panelWidth, panelHeight), availableArea())
+    private val compactOptions get() = latestState?.chat?.compactOptions
+        ?: com.yukisoffd.lyracode.interaction.model.CompactOverlayOptions()
+
+    private fun visibleRect() = OverlayGeometry.fit(
+        if (expanded) OverlayRect(panelX, panelY, panelWidth, panelHeight)
+        else (compactRect ?: OverlayRect(panelX, panelY, 1, 1)).copy(
+            width = dp(compactOptions.widthDp), height = dp(compactOptions.heightDp)), availableArea())
 
     private fun updatePanelGeometry() {
         panelHost?.takeIf(View::isAttachedToWindow)?.let { host ->
             val next = panelLayoutParams()
-            val old = host.layoutParams as WindowManager.LayoutParams
+            val window = panelWindow?.window ?: return@let
+            val old = window.attributes
             if (old.x != next.x || old.y != next.y || old.width != next.width || old.height != next.height || old.flags != next.flags)
-                windowManager.updateViewLayout(host, next)
+                window.attributes = next
         }
     }
 
@@ -81,7 +96,9 @@ internal class TaskHudController(
     }
 
     fun render(state: ManualControlState) {
+        val appearanceChanged = latestState?.chat?.compactOptions != state.chat.compactOptions
         latestState = state
+        if (appearanceChanged) updateWindowBackground()
         if (!state.isActive()) {
             removeViews()
             return
@@ -90,6 +107,10 @@ internal class TaskHudController(
         val approvalId = state.approval?.id ?: state.selection?.takeIf { !it.automatic }?.confirmationToken
         if (approvalId != null && approvalId != shownApproval) chatVisible = true
         shownApproval = approvalId
+        if (!expanded && !state.canUseCompactChat()) {
+            expanded = true
+            updateWindowBackground()
+        }
         if (pet == null) pet = com.yukisoffd.lyracode.interaction.pet.DesktopPetWindow(context, {
             setChatVisible(!chatVisible)
         }, onSubmit)
@@ -114,19 +135,56 @@ internal class TaskHudController(
         chatVisible = visible
         if (!visible) chatPanel?.releaseInput()
         panelHost?.visibility = if (visible) View.VISIBLE else View.GONE
+        panelWindow?.window?.decorView?.visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
+    private fun setCompact(compact: Boolean) {
+        val state = latestState ?: return
+        if (compact && !state.canUseCompactChat()) return
+        if (expanded == !compact) return
+        chatPanel?.releaseInput()
+        if (compact) {
+            val rect = visibleRect()
+            compactRect = compactRect ?: rect
+            // Keyboard fitting must not constrain the compact presentation after input is released.
+            keyboardTop = null
+        }
+        expanded = !compact
+        updateWindowBackground()
+        updatePanel(state)
+        panelHost?.invalidate()
     }
 
     fun destroy() = removeViews()
 
     private fun updatePanel(state: ManualControlState) {
         panelHost?.visibility = if (chatVisible) View.VISIBLE else View.GONE
+        panelWindow?.window?.decorView?.visibility = if (chatVisible) View.VISIBLE else View.GONE
         updatePanelGeometry()
         val signature = panelSignature(state)
         if (signature == lastPanelSignature) return
         val host = panelHost ?: TouchAwareFrameLayout(context).also { newHost ->
-            runCatching { windowManager.addView(newHost, panelLayoutParams()) }
+            runCatching {
+                val dialog = Dialog(context, R.style.Theme_LyraCode_FloatingChat).apply {
+                    requestWindowFeature(Window.FEATURE_NO_TITLE)
+                    setCancelable(false)
+                    setCanceledOnTouchOutside(false)
+                    setContentView(newHost)
+                    window!!.apply {
+                        attributes = panelLayoutParams()
+                        setDecorFitsSystemWindows(false)
+                        decorView.setPadding(0, 0, 0, 0)
+                    }
+                }
+                panelWindow = dialog
+                updateWindowBackground()
+                dialog.show()
+                dialog.window!!.decorView.visibility = if (chatVisible) View.VISIBLE else View.GONE
+                windowManager.addCrossWindowBlurEnabledListener(context.mainExecutor, blurListener)
+                blurListenerRegistered = true
+            }
                 .onSuccess { panelHost = newHost }
-                .onFailure { Log.w(LOG_TAG, "Unable to add control panel", it) }
+                .onFailure { panelWindow?.dismiss(); panelWindow = null; Log.w(LOG_TAG, "Unable to add control panel", it) }
         }
         if (host === panelHost) {
             val panel = chatPanel ?: DeviceChatPanel(context, DragTouchListener(),
@@ -134,6 +192,7 @@ internal class TaskHudController(
                     updateInputFocus(focused)
                 }, onSubmit = onSubmit, onPause = onPause, onStop = onStop,
                 onConfirm = onConfirm, onReject = onCancelSelection, onApproval = onApproval, onClearContext = onClearContext, onConfigure = onConfigure,
+                onCompactChanged = ::setCompact,
             ).also { chatPanel = it; host.addView(it, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)) }
             panel.render(state, expanded)
             lastPanelSignature = signature
@@ -148,10 +207,22 @@ internal class TaskHudController(
     private fun updateInputFocus(focused: Boolean) {
         if (inputFocused == focused) return
         inputFocused = focused
-        panelHost?.takeIf(View::isAttachedToWindow)?.let { host ->
-            runCatching { windowManager.updateViewLayout(host, panelLayoutParams()) }
+        panelHost?.takeIf(View::isAttachedToWindow)?.let {
+            runCatching { updatePanelGeometry() }
                 .onFailure { Log.w(LOG_TAG, "Unable to update overlay input focus", it) }
         }
+    }
+
+    private fun updateWindowBackground() {
+        val window = panelWindow?.window ?: return
+        val blur = !expanded && windowManager.isCrossWindowBlurEnabled
+        // The full panel owns its shape and corner grips, as in the original overlay. Only the
+        // compact window needs a native rounded outline to bound the compositor's blur region.
+        window.setBackgroundDrawable(if (expanded) android.graphics.drawable.ColorDrawable(Color.TRANSPARENT) else GradientDrawable().apply {
+            setColor(Color.TRANSPARENT)
+            cornerRadius = dp(26).toFloat()
+        })
+        window.setBackgroundBlurRadius(if (blur) dp(compactOptions.blurDp).coerceAtMost(150) else 0)
     }
 
     private fun updateHighlight(bounds: ScreenBounds) {
@@ -209,7 +280,10 @@ internal class TaskHudController(
 
     private fun removeViews() {
         pet?.destroy(); pet = null
-        panelHost?.let { runCatching { windowManager.removeView(it) } }
+        if (blurListenerRegistered) windowManager.removeCrossWindowBlurEnabledListener(blurListener)
+        blurListenerRegistered = false
+        panelWindow?.let { runCatching { it.dismiss() } }
+        panelWindow = null
         panelHost = null
         chatPanel = null
         inputFocused = false
@@ -218,6 +292,8 @@ internal class TaskHudController(
         pendingPanelState = null
         lastPanelSignature = null
         panelTouchActive = false
+        expanded = true
+        compactRect = null
         removeHighlight()
     }
 
@@ -226,7 +302,8 @@ internal class TaskHudController(
         return WindowManager.LayoutParams(
             rect.width, rect.height, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             (if (inputFocused) 0 else WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.LEFT
@@ -274,7 +351,8 @@ internal class TaskHudController(
                     val current = visibleRect()
                     val moved = OverlayGeometry.fit(current.copy(x = (startX + event.rawX - downRawX).roundToInt(),
                         y = (startY + event.rawY - downRawY).roundToInt()), availableArea())
-                    panelX = moved.x; panelY = moved.y
+                    if (expanded) { panelX = moved.x; panelY = moved.y }
+                    else compactRect = moved
                     updatePanelGeometry()
                     return true
                 }
@@ -343,6 +421,7 @@ internal class TaskHudController(
 
         override fun dispatchDraw(canvas: Canvas) {
             super.dispatchDraw(canvas)
+            if (!expanded) return
             val inset = dp(9).toFloat(); val length = dp(10).toFloat()
             for (left in listOf(true, false)) for (top in listOf(true, false)) {
                 val x = if (left) inset else width - inset
@@ -356,7 +435,7 @@ internal class TaskHudController(
             if (event.actionMasked == MotionEvent.ACTION_DOWN) {
                 panelTouchActive = true
                 requestUnbufferedDispatch(event)
-                resizing = (event.x < dp(28) || event.x > width - dp(28)) &&
+                resizing = expanded && (event.x < dp(28) || event.x > width - dp(28)) &&
                     (event.y < dp(28) || event.y > height - dp(28))
                 if (resizing) {
                     resizeLeft = event.x < width / 2; resizeTop = event.y < height / 2

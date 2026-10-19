@@ -41,7 +41,7 @@ import com.yukisoffd.lyracode.interaction.session.ManualControlController
 import kotlinx.coroutines.delay
 
 @Composable
-internal fun ManualControlDebugScreen(settings: AppSettings) {
+internal fun ManualControlDebugScreen(settings: AppSettings, onOpenFloatingPageSettings: () -> Unit = {}) {
     val context = LocalContext.current
     val state by ManualControlController.state.collectAsState()
     val connected by AccessibilityConnection.connected.collectAsState()
@@ -138,6 +138,9 @@ internal fun ManualControlDebugScreen(settings: AppSettings) {
             ) {
                 Text(context.getString(R.string.manual_control_stop))
             }
+        }
+        OutlinedButton(onClick = onOpenFloatingPageSettings, modifier = Modifier.fillMaxWidth()) {
+            Text(context.getString(R.string.floating_page_settings))
         }
         OutlinedButton(onClick = { context.startActivity(android.content.Intent(context,
             com.yukisoffd.lyracode.interaction.pet.DesktopPetSettingsActivity::class.java)) }) { Text(context.getString(R.string.pet_settings_entry)) }

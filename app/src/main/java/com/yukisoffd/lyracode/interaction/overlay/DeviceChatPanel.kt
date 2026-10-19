@@ -37,34 +37,34 @@ internal class DeviceChatPanel(
     onApproval: (String, Boolean) -> Unit = { _, _ -> },
     onClearContext: () -> Unit = {},
     private val onConfigure: (String) -> Unit = {},
+    private val onCompactChanged: (Boolean) -> Unit = {},
 ) : LinearLayout(baseContext.localizedContext(AppSettings(baseContext).languageMode)) {
     private val palette = OverlayPalette(context)
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     private val body = LinearLayout(context).apply { orientation = VERTICAL }
     private val heading = label(18, palette.text)
     private var renderedChat = com.yukisoffd.lyracode.interaction.session.DeviceChatState()
-    private val workspace = button("") { showOptions(true) }.apply { contentDescription = context.getString(R.string.floating_choose_workspace); setIcon(R.drawable.ic_floating_workspace) }
-    private val more = button("+") { showOptions(false) }.apply { contentDescription = context.getString(R.string.floating_more) }
-    private fun showOptions(workspaces: Boolean) {
+    private val compactToggle = button("") { if (renderedChat.running) onCompactChanged(true) }.apply {
+        contentDescription = context.getString(R.string.floating_compact)
+        setIcon(R.drawable.ic_floating_compact)
+    }
+    private val more = button("+") { showOptions() }.apply { contentDescription = context.getString(R.string.floating_more) }
+    private val header = LinearLayout(context)
+    private val compactRow = CompactChatBar(context, onDrag, { onCompactChanged(false) }, onPause)
+    private var compact = false
+
+    private fun showOptions() {
         releaseInput()
-        val anchor = if (workspaces) workspace else more
         val dark = androidx.core.graphics.ColorUtils.calculateLuminance(palette.surface) < 0.5
-        val popup = android.widget.PopupMenu(android.view.ContextThemeWrapper(context, if (dark) android.R.style.Theme_Material else android.R.style.Theme_Material_Light), anchor)
-        val options = if (workspaces) null else runCatching { org.json.JSONObject(renderedChat.configurationOptions).optJSONArray("models") }.getOrNull()
+        val popup = android.widget.PopupMenu(android.view.ContextThemeWrapper(context, if (dark) android.R.style.Theme_Material else android.R.style.Theme_Material_Light), more)
+        val options = runCatching { org.json.JSONObject(renderedChat.configurationOptions).optJSONArray("models") }.getOrNull()
         val actions = mutableMapOf<Int, () -> Unit>()
-        if (workspaces) {
-            popup.menu.add(context.getString(R.string.floating_current_workspace, renderedChat.workspaceLabel.ifBlank { context.getString(R.string.label_no_workspace) })).isEnabled = false
-            popup.menu.add(0, -1, 0, R.string.floating_choose_workspace)
-            actions[-1] = { context.startActivity(android.content.Intent(context, FloatingWorkspaceActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
-            popup.menu.add(0, -2, 1, R.string.floating_clear_workspace)
-            actions[-2] = { onConfigure(org.json.JSONObject().put("workspace", "").toString()) }
-        }
         for (i in 0 until (options?.length() ?: 0)) {
             val option = options!!.getJSONObject(i)
             popup.menu.add(0, i + 1, i + 2, option.optString("label"))
             actions[i + 1] = { onConfigure(option.toString()) }
         }
-        if (!workspaces && actions.isEmpty()) popup.menu.add(R.string.floating_no_models).isEnabled = false
+        if (actions.isEmpty()) popup.menu.add(R.string.floating_no_models).isEnabled = false
         popup.setOnMenuItemClickListener { actions[it.itemId]?.invoke(); true }
         popup.show()
     }
@@ -128,9 +128,8 @@ internal class DeviceChatPanel(
         setPadding(dp(16), dp(8), dp(16), dp(12))
         elevation = dp(8).toFloat()
         background = GradientDrawable().apply { setColor(palette.surface); cornerRadius = dp(26).toFloat() }
-        val header = LinearLayout(context)
         header.gravity = android.view.Gravity.CENTER_VERTICAL
-        header.addView(workspace, LayoutParams(dp(44), dp(44)))
+        header.addView(compactToggle, LayoutParams(dp(44), dp(44)))
         header.addView(heading.apply {
             textSize = 14f
             gravity = android.view.Gravity.CENTER
@@ -174,6 +173,8 @@ internal class DeviceChatPanel(
         composerContainer = composer
         body.addView(composer)
         addView(body, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
+        compactRow.visibility = View.GONE
+        addView(compactRow, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         input.doAfterTextChanged { updateSendVisibility() }
         updateSendVisibility()
         post { onConfigure("{}") }
@@ -188,13 +189,26 @@ internal class DeviceChatPanel(
     }
 
     fun render(state: ManualControlState, expanded: Boolean) {
+        val nextCompact = !expanded
+        if (compact != nextCompact) {
+            compact = nextCompact
+            setPadding(dp(if (compact) 0 else 16), dp(if (compact) 0 else 8), dp(if (compact) 0 else 16), dp(if (compact) 0 else 12))
+            background = if (compact) null else GradientDrawable().apply {
+                setColor(palette.surface); cornerRadius = dp(26).toFloat()
+            }
+        }
+        header.visibility = if (expanded) View.VISIBLE else View.GONE
+        compactRow.visibility = if (compact) View.VISIBLE else View.GONE
         body.visibility = if (expanded) View.VISIBLE else View.GONE
         val chat = state.chat
         renderedChat = chat
         heading.text = chat.modelLabel.ifBlank { chat.providerLabel.substringAfterLast(" · ") }
-        workspace.contentDescription = chat.workspaceLabel.ifBlank { context.getString(R.string.floating_choose_workspace) }
-        workspace.isEnabled = !chat.running
+        compactToggle.isEnabled = state.canUseCompactChat()
+        compactToggle.alpha = if (compactToggle.isEnabled) 1f else .35f
         more.isEnabled = !chat.running
+        compactRow.render(chat.compactOptions,
+            chat.status.ifBlank { context.getString(R.string.floating_thinking) },
+            chat.compactPreview().ifBlank { context.getString(R.string.floating_working) })
         if (chat.running && chat.messages.lastOrNull { it.role == "user" }?.text == input.text.toString().trim()) input.text.clear()
         transcript.render(chat)
         val selection = state.selection
@@ -227,15 +241,15 @@ internal class DeviceChatPanel(
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val available = View.MeasureSpec.getSize(heightMeasureSpec)
-        val compact = View.MeasureSpec.getMode(heightMeasureSpec) != View.MeasureSpec.UNSPECIFIED && available < dp(360)
-        val lines = if (compact) 1 else 3
+        val smallViewport = View.MeasureSpec.getMode(heightMeasureSpec) != View.MeasureSpec.UNSPECIFIED && available < dp(360)
+        val lines = if (smallViewport) 1 else 3
         if (input.maxLines != lines) input.maxLines = lines
-        val previewHeight = if (compact) dp(60) else dp(90)
+        val previewHeight = if (smallViewport) dp(60) else dp(90)
         if (approvalScroll.layoutParams.height != previewHeight)
             approvalScroll.layoutParams = approvalScroll.layoutParams.apply { height = previewHeight }
         // Standalone previews have no window constraint; real overlays always provide an exact size.
         val boundedHeight = if (View.MeasureSpec.getMode(heightMeasureSpec) == View.MeasureSpec.UNSPECIFIED)
-            View.MeasureSpec.makeMeasureSpec(dp(480), View.MeasureSpec.EXACTLY) else heightMeasureSpec
+            View.MeasureSpec.makeMeasureSpec(dp(if (compact) renderedChat.compactOptions.heightDp else 480), View.MeasureSpec.EXACTLY) else heightMeasureSpec
         super.onMeasure(widthMeasureSpec, boundedHeight)
     }
 

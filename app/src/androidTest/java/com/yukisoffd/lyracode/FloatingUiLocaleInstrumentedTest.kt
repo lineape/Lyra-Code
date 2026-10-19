@@ -21,7 +21,7 @@ class FloatingUiLocaleInstrumentedTest {
     private fun descendants(view: View): List<View> = listOf(view) + if (view is ViewGroup) (0 until view.childCount).flatMap { descendants(view.getChildAt(it)) } else emptyList()
     private fun windows() = android.view.inspector.WindowInspector.getGlobalWindowViews().flatMap(::descendants)
 
-    @Test fun hostLanguageAndCurrentWorkspaceMenuExcludePreviousFolders() {
+    @Test fun hostLanguageAndCompactToggleReplaceWorkspaceMenu() {
         val settings = AppSettings(context)
         val old = settings.languageMode
         try {
@@ -44,13 +44,13 @@ class FloatingUiLocaleInstrumentedTest {
                     i.runOnMainSync {
                         assertEquals(hint, descendants(panel).filterIsInstance<EditText>().single().hint.toString())
                         assertTrue(descendants(panel).any { it.contentDescription == sendLabel })
-                        descendants(panel).filterIsInstance<Button>().single { it.contentDescription == "Current project" }.performClick()
-                    }
-                    i.waitForIdleSync(); SystemClock.sleep(100)
-                    i.runOnMainSync {
-                        val texts = windows().filterIsInstance<TextView>()
-                        assertTrue(texts.any { it.text.toString() == panel.context.getString(R.string.floating_current_workspace, "Current project") })
-                        assertFalse(texts.any { it.text.toString().contains("Old project") })
+                        val controls = descendants(panel).filterIsInstance<Button>()
+                        val compact = controls.single { it.contentDescription == panel.context.getString(R.string.floating_compact) }
+                        assertFalse(compact.isEnabled)
+                        assertFalse(controls.any { it.contentDescription == "Current project" ||
+                            it.contentDescription == panel.context.getString(R.string.floating_choose_workspace) })
+                        assertTrue(controls.any { it.contentDescription == panel.context.getString(R.string.floating_restore) })
+                        assertTrue(controls.any { it.contentDescription == panel.context.getString(R.string.floating_stop_output) })
                     }
                 } finally { i.runOnMainSync { hud.destroy() } }
             }

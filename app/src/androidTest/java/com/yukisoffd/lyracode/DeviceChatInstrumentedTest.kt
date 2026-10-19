@@ -124,7 +124,7 @@ class DeviceChatInstrumentedTest {
         } finally { instrumentation.runOnMainSync { hud.destroy() } }
     }
 
-    @Test fun floatingComposerHasWorkspaceModelAndNewChatWithConditionalSend() {
+    @Test fun floatingComposerHasCompactModelAndNewChatWithConditionalSend() {
         instrumentation.runOnMainSync {
             val panel = DeviceChatPanel(instrumentation.targetContext, View.OnTouchListener { _, _ -> false }, {}, {}, {}, {}, {}, {})
             val state = ManualControlState(chat = DeviceChatState(modelLabel = "local-model", workspaceLabel = "Test workspace"))
@@ -132,7 +132,8 @@ class DeviceChatInstrumentedTest {
             val views = descendants(panel)
             assertTrue(views.filterIsInstance<android.widget.TextView>().any { it.text == "local-model" })
             assertFalse(views.filterIsInstance<android.widget.TextView>().any { it.text == "Lyra" || it.text.contains("等待目标") })
-            assertTrue(views.any { it.contentDescription == "Test workspace" })
+            assertFalse(views.any { it.contentDescription == "Test workspace" })
+            assertTrue(views.any { it.contentDescription == panel.context.getString(R.string.floating_compact) })
             val editor = views.filterIsInstance<EditText>().single()
             val send = views.filterIsInstance<android.widget.Button>().single { it.text == "↑" }
             assertEquals(View.GONE, send.visibility)
@@ -212,8 +213,8 @@ class DeviceChatInstrumentedTest {
                 }
                 instrumentation.waitForIdleSync(); SystemClock.sleep(200)
                 instrumentation.runOnMainSync {
-                    assertTrue("Corner did not reduce width", panel.width < oldWidth)
-                    assertTrue("Corner did not reduce height", panel.height < oldHeight)
+                    assertTrue("Corner left=$left top=$top did not reduce width: $oldWidth -> ${panel.width}", panel.width < oldWidth)
+                    assertTrue("Corner left=$left top=$top did not reduce height: $oldHeight -> ${panel.height}", panel.height < oldHeight)
                     assertEquals("缩放保留草稿", editor.text.toString())
                     assertTrue(panel.isAttachedToWindow)
                 }
@@ -437,22 +438,26 @@ class DeviceChatInstrumentedTest {
         }
     }
 
-    @Test fun overlayProtocolRoundTripsBoundedChatWithoutCredentials() {
-        val chat = DeviceChatState(List(20) { DeviceChatMessage(it.toLong(), "assistant", "x".repeat(5000)) },
+    @Test fun overlayProtocolPreservesLongHistoryOutsideBinder() {
+        val context = instrumentation.targetContext
+        val chat = DeviceChatState(List(80) { DeviceChatMessage(it.toLong(), "assistant", "正文 $it " + "x".repeat(5000), thinking = "思考".repeat(4000)) },
             running = true, status = "等待确认", providerLabel = "Provider · model")
         val state = ManualControlState(activeUntilEpochMillis = System.currentTimeMillis() + 30_000,
             agentTargetPackage = "example.app", chat = chat)
-        val restored = ManualControlOverlayProtocol.decode(ManualControlOverlayProtocol.encode(state))!!
-        assertEquals(16, restored.chat.messages.size)
-        assertEquals(4000, restored.chat.messages.first().text.length)
+        val encoded = ManualControlOverlayProtocol.encode(state, context = context)
+        val parcel = android.os.Parcel.obtain()
+        try {
+            parcel.writeBundle(encoded)
+            assertTrue("Transcript must fit safely in a Binder transaction", parcel.dataSize() < 200_000)
+        } finally { parcel.recycle() }
+        val restored = ManualControlOverlayProtocol.decode(encoded, context)!!
+        assertEquals(chat.messages, restored.chat.messages)
         assertEquals("example.app", restored.agentTargetPackage)
         assertEquals(chat.providerLabel, restored.chat.providerLabel)
         assertTrue(restored.chat.running)
-        val parcel = android.os.Parcel.obtain()
-        try {
-            parcel.writeBundle(ManualControlOverlayProtocol.encode(state))
-            assertTrue("Transcript must fit safely in a Binder transaction", parcel.dataSize() < 200_000)
-        } finally { parcel.recycle() }
+        assertFalse(java.io.File(context.cacheDir, "floating-transcripts/${encoded.getString("chat_transcript")}").exists())
+        encoded.putString("chat_transcript", "../outside.json")
+        assertNull(ManualControlOverlayProtocol.decode(encoded, context))
     }
 
     @Test fun approvalIdentitySurvivesIpc() {
@@ -488,7 +493,7 @@ class DeviceChatInstrumentedTest {
                 {}, {}, {}, {}, {}, {})
             panel.render(original, true)
             val preview = descendants(panel).filterIsInstance<android.widget.TextView>()
-                .single { it.text.toString().contains("将替换输入框内容") }
+                .single { it.text.toString().contains(text) }
             assertTrue(preview.text.toString().contains(text))
             assertTrue(preview.parent is android.widget.ScrollView)
             val width = (340 * panel.resources.displayMetrics.density).toInt()

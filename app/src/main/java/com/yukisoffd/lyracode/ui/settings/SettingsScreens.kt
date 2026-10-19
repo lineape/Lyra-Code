@@ -61,6 +61,7 @@ import com.yukisoffd.lyracode.data.SkillPack
 import com.yukisoffd.lyracode.filetransfer.FileTransferClient
 import com.yukisoffd.lyracode.interaction.ui.DeviceInteractionSettings
 import com.yukisoffd.lyracode.interaction.ui.ManualControlDebugScreen
+import com.yukisoffd.lyracode.interaction.ui.FloatingPageSettings
 import com.yukisoffd.lyracode.mcp.LocalMcpServerManager
 import com.yukisoffd.lyracode.mcp.McpClientManager
 import com.yukisoffd.lyracode.server.MiniServerManager
@@ -172,6 +173,7 @@ internal fun SettingsScreen(
         CompliancePageIds.APP_PERMISSIONS -> CompliancePageIds.INDEX
         "custom_theme_color" -> "theme_mode"
         "device_interaction_control" -> "device_interaction"
+        "floating_page" -> "device_interaction_control"
         "font_library" -> "font"
         "topic_summary_model_topic",
         "topic_summary_model_compression",
@@ -280,14 +282,14 @@ internal fun SettingsScreen(
                         .padding(pagePadding)
                         .fillMaxSize(),
                 ) pageContent@{
-            if (target in setOf("device_interaction", "device_interaction_control") && !com.yukisoffd.lyracode.interaction.DeviceInteractionAvailability.isSupported()) {
+            if (target in setOf("device_interaction", "device_interaction_control", "floating_page") && !com.yukisoffd.lyracode.interaction.DeviceInteractionAvailability.isSupported()) {
                 Text(context.getString(R.string.device_interaction_status_unsupported), Modifier.padding(18.dp))
                 return@pageContent
             }
             if (target != null) {
                 SettingsDetailPage(
                     inset = target != "model",
-                    scroll = target !in setOf("model", "prompts", "memories", "licenses", "about", "device", "font", "font_library", "github_acceleration"),
+                    scroll = target !in setOf("model", "prompts", "memories", "licenses", "about", "device", "font", "font_library", "github_acceleration", "floating_page"),
                 ) {
                     when (target) {
                     "profile" -> ProfileSettingsSummary(settings, controller::reloadProfiles) { notice ->
@@ -385,7 +387,8 @@ internal fun SettingsScreen(
                         settings = settings,
                         onOpenManualControl = { detail = "device_interaction_control" },
                     )
-                    "device_interaction_control" -> ManualControlDebugScreen(settings)
+                    "device_interaction_control" -> ManualControlDebugScreen(settings, onOpenFloatingPageSettings = { detail = "floating_page" })
+                    "floating_page" -> FloatingPageSettings()
                     "tools" -> AgentToolSettings(settings, termuxExecutor, controller.settingsRevision.intValue)
                     "termux" -> TermuxSettings(settings, termuxExecutor, workspaceManager)
                     "debian" -> ProotLinuxSettings()
@@ -628,9 +631,11 @@ internal fun SettingsScreen(
                             initialState == "custom_theme_color" && targetState == "theme_mode" -> false
                             initialState == "font_library" && targetState == "font" -> false
                             initialState == "device_interaction_control" && targetState == "device_interaction" -> false
+                            initialState == "floating_page" && targetState == "device_interaction_control" -> false
                             initialState == "theme_mode" && targetState == "custom_theme_color" -> true
                             initialState == "font" && targetState == "font_library" -> true
                             initialState == "device_interaction" && targetState == "device_interaction_control" -> true
+                            initialState == "device_interaction_control" && targetState == "floating_page" -> true
                             initialState in ADDITIONAL_MODEL_DETAIL_IDS && targetState == "topic_summary_model" -> false
                             initialState == "topic_summary_model" && targetState in ADDITIONAL_MODEL_DETAIL_IDS -> true
                             initialState in setOf("theme_mode", "font", "refresh_rate", "chat_background", "streaming_output", "app_icon") && targetState == "theme" -> false
@@ -713,6 +718,7 @@ internal fun settingsDetailTitle(context: Context, detail: String): String = whe
     "system_permissions" -> context.getString(R.string.detail_system_permissions)
     "device_interaction" -> context.getString(R.string.detail_device_interaction)
     "device_interaction_control" -> context.getString(R.string.detail_manual_control)
+    "floating_page" -> context.getString(R.string.floating_page_settings)
     "tools" -> context.getString(R.string.detail_tools)
     "storage" -> context.getString(R.string.detail_storage)
     "termux" -> context.getString(R.string.detail_termux)

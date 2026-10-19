@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -22,7 +23,9 @@ internal object ManualControlOverlayPublisher {
         if (!started.compareAndSet(false, true)) return
         val appContext = context.applicationContext
         scope.launch {
-            ManualControlController.state.collect { state ->
+            combine(ManualControlController.state, FloatingPagePreferences.observe(appContext)) { state, options ->
+                state.copy(chat = state.chat.copy(compactOptions = options))
+            }.collect { state ->
                 if (!state.isActive() && ManualControlForegroundConnection.state.value == ManualControlForegroundState.STOPPED) {
                     return@collect
                 }
@@ -37,7 +40,7 @@ internal object ManualControlOverlayPublisher {
                             .setAction(action)
                             .putExtra(
                                 ManualControlOverlayProtocol.EXTRA_STATE,
-                                ManualControlOverlayProtocol.encode(state),
+                                ManualControlOverlayProtocol.encode(state, context = appContext),
                             )
                             .putExtra(
                                 ManualControlOverlayProtocol.EXTRA_SENT_AT_ELAPSED,

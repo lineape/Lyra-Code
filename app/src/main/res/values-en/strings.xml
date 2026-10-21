@@ -1252,6 +1252,7 @@
     <string name="label_app_id">App ID</string>
     <string name="section_repos">Repository</string>
     <string name="label_website">Official website</string>
+    <string name="label_documentation">Documentation</string>
     <string name="section_build_info">Section Build Info</string>
     <string name="menu_device_info">Device info</string>
     <string name="menu_update_manifest">Menu Update Manifest</string>
@@ -1493,7 +1494,7 @@
     <string name="compliance_documents">Agreements and lists</string>
     <string name="compliance_index_intro">These documents describe the current version and are available offline. Services, servers, and websites selected by you may apply their own terms.</string>
     <string name="compliance_review_notice">These documents disclose current behavior but do not by themselves guarantee compliance with every store or jurisdiction. Update them whenever features or data practices change.</string>
-    <string name="compliance_effective_date">Effective and updated: September 9, 2026</string>
+    <string name="compliance_effective_date">Effective and updated: October 21, 2026</string>
     <string name="compliance_user_agreement">User Agreement</string>
     <string name="compliance_user_agreement_desc">Usage rules, risks, and responsibilities</string>
     <string name="compliance_privacy_policy">Privacy Policy</string>

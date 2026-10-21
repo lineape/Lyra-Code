@@ -7,13 +7,22 @@ import org.json.JSONObject
 
 internal const val RESPONSES_REPLAY_ITEMS_KEY = "_lyra_responses_replay_items"
 
+/** Keep portable conversation content/tool results when resuming with another service/account. */
+internal fun chatGptHistoryForService(raw: JSONObject, sourceProfileId: String, target: ApiProfile): JSONObject {
+    if (sourceProfileId == target.id || (!sourceProfileId.startsWith("chatgpt:") && !target.isChatGpt)) return raw
+    return JSONObject(raw.toString()).apply {
+        remove(RESPONSES_REPLAY_ITEMS_KEY)
+        listOf("reasoning_content", "thinking_content", "reasoning_details").forEach(::remove)
+    }
+}
+
 internal fun isDeepSeekApiProfile(profile: ApiProfile): Boolean {
     return profile.presetId == "deepseek" || ProviderCatalog.match(profile)?.id == "deepseek"
 }
 
 /** DeepSeek's built-in web search is a server-side Responses API tool, not Lyra's web_search function. */
 internal fun supportsDeepSeekNativeWebSearch(profile: ApiProfile): Boolean {
-    return profile.useResponsesApi &&
+    return profile.usesResponsesApi &&
         profile.apiFormat == ApiProfile.API_FORMAT_OPENAI &&
         isDeepSeekApiProfile(profile)
 }
@@ -130,6 +139,9 @@ internal fun appendReplayableResponseItems(
 }
 
 private fun replayableReasoningItem(item: JSONObject): JSONObject? {
+    // Stateless OpenAI Responses return opaque encrypted reasoning for tool-call continuity.
+    // Preserve the native item for its original service; chatGptHistoryForService removes it on switching.
+    if (item.optString("encrypted_content").isNotBlank()) return JSONObject(item.toString())
     val content = item.optJSONArray("content") ?: return null
     val reasoningContent = JSONArray()
     for (index in 0 until content.length()) {

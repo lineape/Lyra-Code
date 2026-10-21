@@ -51,7 +51,7 @@ internal class MediaGenerationClient(
         model: String,
         request: MediaGenerationPrompt,
     ): MediaGenerationResult {
-
+        require(!profile.isChatGpt) { "ChatGPT plan usage does not support media generation. Choose another service." }
         require(model.isNotBlank()) { "The configured ${request.kind.value} model is empty." }
         val references = request.references.distinct().map(::normalizeReferenceSource)
         val prompt = mediaPromptText(request)
@@ -64,7 +64,7 @@ internal class MediaGenerationClient(
             .url(
                 when (profile.apiFormat) {
                     ApiProfile.API_FORMAT_GEMINI -> profile.geminiGenerateContentEndpoint(model)
-                    ApiProfile.API_FORMAT_OPENAI -> if (profile.useResponsesApi) profile.responsesEndpoint else profile.chatEndpoint
+                    ApiProfile.API_FORMAT_OPENAI -> if (profile.usesResponsesApi) profile.responsesEndpoint else profile.chatEndpoint
                     else -> profile.chatEndpoint
                 },
             )
@@ -135,7 +135,7 @@ internal class MediaGenerationClient(
         references: List<MediaReference>,
     ): JSONObject {
         val userContent = openAiUserContent(prompt, references)
-        return if (profile.useResponsesApi) {
+        return if (profile.usesResponsesApi) {
             JSONObject()
                 .put("model", model)
                 .put(

@@ -1329,6 +1329,7 @@
     <string name="label_app_id">应用 ID</string>
     <string name="section_repos">仓库</string>
     <string name="label_website">官网</string>
+    <string name="label_documentation">使用文档</string>
     <string name="section_build_info">构建信息</string>
     <string name="menu_device_info">手机信息</string>
     <string name="menu_update_manifest">更新清单</string>
@@ -1576,7 +1577,7 @@
     <string name="compliance_documents">协议与清单</string>
     <string name="compliance_index_intro">以下文档结合当前版本的实际功能编写，可离线查看。外部模型、服务器和网站由用户自行选择，其规则可能另行适用。</string>
     <string name="compliance_review_notice">说明：这些文档用于如实说明当前版本的数据处理和权限用途，不代表已经自动满足任何应用市场或地区的全部审核要求。功能或数据处理方式变化时应同步更新。</string>
-    <string name="compliance_effective_date">生效及更新日期：2026 年 9 月 9 日</string>
+    <string name="compliance_effective_date">生效及更新日期：2026 年 10 月 21 日</string>
     <string name="compliance_user_agreement">用户协议</string>
     <string name="compliance_user_agreement_desc">使用规则、风险与责任边界</string>
     <string name="compliance_privacy_policy">隐私政策</string>

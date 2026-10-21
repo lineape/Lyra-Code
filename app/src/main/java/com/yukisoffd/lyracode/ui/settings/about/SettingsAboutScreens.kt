@@ -76,6 +76,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.*
 import com.yukisoffd.lyracode.data.AppUpdateInfo
 import com.yukisoffd.lyracode.data.UpdateDownloadProgress
@@ -563,6 +564,13 @@ internal fun AboutSoftwareScreen(
                     title = uiText(R.string.label_website),
                     value = "lyracode.app",
                     onClick = { uriHandler.openUri("https://lyracode.app") },
+                )
+                KimiDivider()
+                SocialLinkRow(
+                    logo = { AboutIconBadge(Icons.AutoMirrored.Filled.MenuBook) },
+                    title = uiText(R.string.label_documentation),
+                    value = "docs.lyracode.app",
+                    onClick = { uriHandler.openUri("https://docs.lyracode.app/") },
                 )
                 KimiDivider()
                 SocialLinkRow(

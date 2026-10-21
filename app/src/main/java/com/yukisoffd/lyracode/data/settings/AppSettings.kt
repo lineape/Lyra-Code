@@ -927,6 +927,10 @@ class AppSettings(context: Context) {
     }
 
     // Account sessions are device-local and deliberately excluded from all exports/backups.
+    internal val chatGptAccount: ChatGptAccountClient by lazy {
+        ChatGptAccountClient(ChatGptCredentialStore(appContext))
+    }
+
     internal val newApiAccount: NewApiAccountClient by lazy {
         val accountPrefs = createSecurePrefs("lyra_new_api_account")
         NewApiAccountClient(object : NewApiAccountStore {

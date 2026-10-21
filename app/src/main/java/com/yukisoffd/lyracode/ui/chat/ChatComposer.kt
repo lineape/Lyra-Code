@@ -117,6 +117,8 @@ internal fun ChatMessageComposer(
 ) {
     var fullscreen by rememberSaveable { mutableStateOf(false) }
 
+    ChatGptComposerIdentity(controller, settings)
+
     ComposerTextEditor(
         value = value,
         onValueChange = onValueChange,
@@ -681,7 +683,7 @@ internal fun AttachmentActionBottomSheet(
                                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary) },
                             )
                             val filteredModels = activeProfile?.enabledModels.orEmpty()
-                                .filter { search.isBlank() || it.contains(search, ignoreCase = true) }
+                                .filter { search.isBlank() || it.contains(search, ignoreCase = true) || activeProfile?.modelDisplayName(it).orEmpty().contains(search, ignoreCase = true) }
                             LazyColumn(
                                 Modifier
                                     .fillMaxWidth()
@@ -693,7 +695,7 @@ internal fun AttachmentActionBottomSheet(
                                         icon = Icons.Default.SmartToy,
                                         logoRes = modelLogoRes(modelName),
                                         logoFallback = canonicalModelName(modelName).ifBlank { modelName },
-                                        title = modelName,
+                                        title = activeProfile?.modelDisplayName(modelName) ?: modelName,
                                         subtitle = activeProfile?.name.orEmpty(),
                                         trailing = if (modelName == controller.activeModel.value) Icons.Default.Check else null,
                                         onClick = {
@@ -863,7 +865,8 @@ internal fun AttachmentActionBottomSheet(
                             ActionSheetRow(
                                 icon = Icons.Default.SmartToy,
                                 title = stringResource(R.string.label_model),
-                                subtitle = controller.activeModel.value.ifBlank { activeProfile?.selectedModel.orEmpty().ifBlank { stringResource(R.string.label_not_selected) } },
+                                subtitle = activeProfile?.modelDisplayName(controller.activeModel.value.ifBlank { activeProfile.selectedModel })
+                                    .orEmpty().ifBlank { stringResource(R.string.label_not_selected) },
                                 trailing = Icons.Default.ChevronRight,
                                 onClick = { onPageChange("models") },
                             )

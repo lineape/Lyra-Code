@@ -48,6 +48,7 @@ internal fun modelRequestHttpException(statusCode: Int, body: String, prefix: St
 
 internal fun isRetryableModelFailure(error: Throwable): Boolean {
     val causes = generateSequence(error as Throwable?) { it.cause }.toList()
+    if (causes.any { it is com.yukisoffd.lyracode.data.ChatGptServiceException }) return false
     if (causes.any { it is SSLHandshakeException || it is SSLPeerUnverifiedException }) return false
     return causes.any { it is RetryableModelHttpException || it is IOException }
 }

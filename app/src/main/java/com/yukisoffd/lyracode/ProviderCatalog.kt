@@ -282,7 +282,7 @@ internal object ProviderCatalog {
         }
     }
 
-    fun logoRes(profile: ApiProfile): Int? = match(profile)?.logoRes
+    fun logoRes(profile: ApiProfile): Int? = if (profile.isChatGpt) R.drawable.ai_service_openai else match(profile)?.logoRes
 
     private fun hostOf(value: String): String = runCatching {
         URI(value.trim()).host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")

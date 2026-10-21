@@ -50,7 +50,7 @@ internal object ModelRequestPreviews {
             else -> {
                 if (profile.apiKey.isNotBlank()) headers["Authorization"] = "Bearer {{apiKey}}"
                 body.put("model", model).put("stream", true)
-                if (profile.useResponsesApi) body.put("input", JSONArray()).put("store", false)
+                if (profile.usesResponsesApi) body.put("input", JSONArray()).put("store", false)
                 else body.put("messages", JSONArray()).put("temperature", 0.2)
             }
         }
@@ -106,6 +106,7 @@ internal fun customizedModelBody(source: JSONObject, config: ModelRequestCustomi
 
 internal fun Request.customizedFor(profile: ApiProfile, model: String, pureMode: Boolean = false): Request {
     val tagged = newBuilder().tag(ModelAuditTag::class.java, ModelAuditTag(profile.id, model)).build().withProviderKeys(profile)
+    if (profile.isChatGpt) return tagged
     val buffer = Buffer()
     body?.writeTo(buffer) ?: return tagged
     val original = runCatching { JSONObject(buffer.readUtf8()) }.getOrNull() ?: return tagged

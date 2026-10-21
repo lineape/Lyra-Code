@@ -26,6 +26,7 @@ import com.yukisoffd.lyracode.ai.UserQuestionRequest
 import com.yukisoffd.lyracode.ai.toRecord
 import com.yukisoffd.lyracode.data.ApiProfile
 import com.yukisoffd.lyracode.data.AppSettings
+import com.yukisoffd.lyracode.data.withChatGptModels
 import com.yukisoffd.lyracode.data.ChatProject
 import com.yukisoffd.lyracode.data.Conversation
 import android.content.Context
@@ -899,6 +900,18 @@ class ChatController(
         status.value = appContext.getString(R.string.status_interrupted)
     }
 
+    internal fun stopChatGptAccountRequests(clientId: String) {
+        val profileIds = settings.profiles().filter { it.chatGptAccountId == clientId }.map { it.id }.toSet()
+        jobs.keys.toList().forEach { id ->
+            if (conversationStore.conversation(id)?.profileId in profileIds) {
+                jobs[id]?.cancel()
+                conversationStore.setConversationMeta(id, status = ConversationStore.STATUS_INTERRUPTED)
+            }
+        }
+        reloadMessages()
+        reloadConversations()
+    }
+
     fun continueActive() {
         val conversationId = activeConversationId.value.takeIf { it > 0 } ?: return
         if (jobs[conversationId]?.isActive == true) return
@@ -1100,9 +1113,11 @@ class ChatController(
             val result = withContext(Dispatchers.IO) { agent.fetchModels(profile) }
             result.onSuccess { models ->
                 val updated = profiles.map {
-                    if (it.id == profile.id) it.copy(
-                        savedModels = (it.savedModels + models).distinct(),
-                    ) else it
+                    when {
+                        it.id != profile.id -> it
+                        it.isChatGpt -> it.withChatGptModels(models, settings.chatGptAccount.cachedModelNames(it.chatGptAccountId))
+                        else -> it.copy(savedModels = (it.savedModels + models).distinct())
+                    }
                 }
                 saveProfiles(updated, profile.id)
             }

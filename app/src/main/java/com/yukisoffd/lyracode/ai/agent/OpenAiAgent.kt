@@ -122,9 +122,11 @@ class OpenAiAgent(
         File(context.cacheDir, "http-audit"),
     )
     private val client = OkHttpClient.Builder()
+        .addInterceptor(ChatGptAuthInterceptor { settings.chatGptAccount })
         .addInterceptor(ProviderKeyInterceptor())
         .addInterceptor(httpAudit.application)
         .addNetworkInterceptor(httpAudit.network)
+        .addNetworkInterceptor(ChatGptRouteGuard())
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.SECONDS)
         .build()
@@ -415,7 +417,7 @@ class OpenAiAgent(
             val payload = historyCompressionPayload(profile, model, instruction, input, budget)
             val endpoint = when (profile.apiFormat) {
                 ApiProfile.API_FORMAT_GEMINI -> profile.geminiGenerateContentEndpoint(model)
-                else -> if (profile.useResponsesApi && profile.apiFormat == ApiProfile.API_FORMAT_OPENAI) profile.responsesEndpoint else profile.chatEndpoint
+                else -> if (profile.usesResponsesApi && profile.apiFormat == ApiProfile.API_FORMAT_OPENAI) profile.responsesEndpoint else profile.chatEndpoint
             }
             val request = Request.Builder().url(endpoint)
                 .apply {
@@ -471,7 +473,7 @@ class OpenAiAgent(
         temperature: Double,
         errorMessage: (Int, String) -> String,
     ): String {
-        val payload = if (profile.useResponsesApi) {
+        val payload = if (profile.usesResponsesApi) {
             JSONObject()
                 .put("model", model)
                 .put("instructions", instruction)
@@ -487,14 +489,14 @@ class OpenAiAgent(
                 .put("stream", false)
         }
         if (modelLooksReasoningCapable(model)) {
-            if (profile.useResponsesApi) {
+            if (profile.usesResponsesApi) {
                 payload.put("reasoning", JSONObject().put("effort", "low"))
             } else if (modelLooksOpenAiReasoningEffortCapable(model)) {
                 payload.put("reasoning_effort", "low")
             }
         }
         val request = Request.Builder()
-            .url(if (profile.useResponsesApi) profile.responsesEndpoint else profile.chatEndpoint)
+            .url(if (profile.usesResponsesApi) profile.responsesEndpoint else profile.chatEndpoint)
             .apply { if (profile.apiKey.isNotBlank()) addHeader("Authorization", "Bearer ${profile.apiKey}") }
             .addHeader("Content-Type", "application/json")
             .post(payload.toString().toRequestBody("application/json".toMediaType()))
@@ -502,7 +504,7 @@ class OpenAiAgent(
         return client.newCall(request.customizedFor(profile, model, settings.purePromptMode)).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) error(errorMessage(response.code, body))
-            extractModelResponseText(JSONObject(body), profile.apiFormat, profile.useResponsesApi)
+            extractModelResponseText(JSONObject(body), profile.apiFormat, profile.usesResponsesApi)
         }
     }
 
@@ -527,7 +529,9 @@ class OpenAiAgent(
 
     private val reachabilityService = AgentReachabilityService(client, reachabilityClient)
 
-    fun fetchModels(profile: ApiProfile): Result<List<String>> = reachabilityService.fetchModels(profile)
+    fun fetchModels(profile: ApiProfile): Result<List<String>> = if (profile.isChatGpt) runCatching {
+        settings.chatGptAccount.fetchModels(profile.chatGptAccountId).map { it.slug }
+    } else reachabilityService.fetchModels(profile)
 
     fun checkReachability(profile: ApiProfile, models: List<String>): ProviderReachabilityReport =
         reachabilityService.checkReachability(profile, models)
@@ -758,7 +762,7 @@ class OpenAiAgent(
             val result = when (profile.apiFormat) {
                 ApiProfile.API_FORMAT_ANTHROPIC -> requestAnthropicModel(conversationId, excludeMessageId, profile, model, preservingDelta)
                 ApiProfile.API_FORMAT_GEMINI -> requestGeminiModel(conversationId, excludeMessageId, profile, model, preservingDelta)
-                else -> if (profile.useResponsesApi) {
+                else -> if (profile.usesResponsesApi) {
                     streamResponsesModel(conversationId, excludeMessageId, profile, model, preservingDelta, onStatus)
                 } else {
                     streamOpenAiModel(conversationId, excludeMessageId, profile, model, preservingDelta)
@@ -842,7 +846,7 @@ class OpenAiAgent(
                 val data = line.removePrefix("data:").trim()
                 if (data.isBlank()) return@consumeModelStream true
                 if (data == "[DONE]") {
-                    streamCompleted = true
+                    streamCompleted = !profile.isChatGpt
                     return@consumeModelStream false
                 }
                 val event = runCatching { JSONObject(data) }.getOrNull() ?: return@consumeModelStream true
@@ -895,6 +899,12 @@ class OpenAiAgent(
                         onStatus(context.getString(R.string.status_native_web_search_completed))
                     }
                     "response.completed", "response.incomplete" -> {
+                        if (profile.isChatGpt && (eventType != "response.completed" ||
+                                event.optJSONObject("response")?.optString("status") != "completed")) {
+                            event.optJSONObject("response")?.let { collectCompletedResponseItems(it, content, thinking, toolBuilders) }
+                            onDelta(content.toString(), thinking.toString())
+                            throw com.yukisoffd.lyracode.data.ChatGptServiceException("response_incomplete")
+                        }
                         streamCompleted = true
                         event.optJSONObject("response")?.let { completed ->
                             val usage = completed.optJSONObject("usage")
@@ -905,18 +915,29 @@ class OpenAiAgent(
                         }
                     }
                     "response.failed" -> {
+                        if (profile.isChatGpt) {
+                            event.optJSONObject("response")?.let { collectCompletedResponseItems(it, content, thinking, toolBuilders) }
+                            onDelta(content.toString(), thinking.toString())
+                            settings.chatGptAccount.fail(profile.chatGptAccountId, response.code, event.toString(), response.header("x-request-id").orEmpty())
+                        }
                         val failed = event.optJSONObject("response")
                         val message = (failed?.optJSONObject("error") ?: event.optJSONObject("error"))?.optString("message")
                             .orEmpty()
                             .ifBlank { "Responses API 请求失败" }
                         throw IOException(message)
                     }
-                    "error" -> throw IOException(event.optJSONObject("error")?.optString("message").orEmpty().ifBlank { "Responses API 请求失败" })
+                    "error" -> {
+                        if (profile.isChatGpt) settings.chatGptAccount.fail(profile.chatGptAccountId, response.code, event.toString(), response.header("x-request-id").orEmpty())
+                        throw IOException(event.optJSONObject("error")?.optString("message").orEmpty().ifBlank { "Responses API 请求失败" })
+                    }
                 }
                 !streamCompleted
             }
         }
-        if (!streamCompleted) throw IOException("Responses API 流式连接在完成标志之前中断")
+        if (!streamCompleted) {
+            if (profile.isChatGpt) throw com.yukisoffd.lyracode.data.ChatGptServiceException("stream_interrupted_before_response_completed")
+            throw IOException("Responses API 流式连接在完成标志之前中断")
+        }
         val calls = toolBuilders.mapNotNull { (index, builder) -> builder.toToolCall(index) }
         val cleanContent = cleanGeneratedText(content.toString())
         val cleanThinking = cleanGeneratedText(thinking.toString())
@@ -942,7 +963,7 @@ class OpenAiAgent(
     ): StreamingResult {
 
         val mediaGeneration = isMediaGenerationModel(model)
-        val messages = normalizeChatCompletionsMessages(promptMessages(conversationId, excludeMessageId, mediaGeneration)).also {
+        val messages = normalizeChatCompletionsMessages(promptMessages(conversationId, excludeMessageId, mediaGeneration, profile)).also {
             if (supportsDeepSeekFilesApi(profile, model)) deepSeekFilesApi.replaceOpenAiInlineImages(it, profile)
         }
         val requestJson = JSONObject()
@@ -1356,6 +1377,7 @@ class OpenAiAgent(
         conversationId: Long,
         excludeMessageId: Long,
         mediaGeneration: Boolean = false,
+        profile: ApiProfile,
     ): JSONArray {
         val messages = JSONArray()
         if (mediaGeneration) {
@@ -1364,7 +1386,7 @@ class OpenAiAgent(
             }
         } else {
             systemMessagesFor(conversationId).forEach(messages::put)
-            val history = openAiHistoryGroups(conversationId, excludeMessageId)
+            val history = openAiHistoryGroups(conversationId, excludeMessageId, profile)
             history.forEach { group ->
                 group.forEach { messages.put(it) }
             }
@@ -1385,7 +1407,7 @@ class OpenAiAgent(
         model: String,
         mediaGeneration: Boolean = false,
     ): JSONArray {
-        val messages = promptMessages(conversationId, excludeMessageId, mediaGeneration).also {
+        val messages = promptMessages(conversationId, excludeMessageId, mediaGeneration, profile).also {
             if (supportsDeepSeekFilesApi(profile, model)) deepSeekFilesApi.replaceOpenAiInlineImages(it, profile)
         }
         val includeReasoningTextFallback = supportsDeepSeekNativeWebSearch(profile) && profile.modelRequestOverrides[model]?.replayThinking != false
@@ -1855,7 +1877,7 @@ class OpenAiAgent(
         return JSONArray().also { array -> output.forEach { array.put(it) } }
     }
 
-    private fun openAiHistoryGroups(conversationId: Long, excludeMessageId: Long): List<List<JSONObject>> {
+    private fun openAiHistoryGroups(conversationId: Long, excludeMessageId: Long, profile: ApiProfile): List<List<JSONObject>> {
         val source = contextHistory(conversationId, excludeMessageId)
         val groups = mutableListOf<List<JSONObject>>()
         var index = 0
@@ -1865,7 +1887,7 @@ class OpenAiAgent(
                 index++
                 continue
             }
-            val json = message.toPromptJson()
+            val json = chatGptHistoryForService(message.toPromptJson(), message.profileId, profile)
             if (json.hasToolCalls()) {
                 val requiredToolIds = json.toolCallIds()
                 val toolMessages = mutableListOf<JSONObject>()
@@ -1893,9 +1915,9 @@ class OpenAiAgent(
 
     private fun applyProviderCacheHints(requestJson: JSONObject, profile: ApiProfile, model: String, conversationId: Long) {
         val host = runCatching { URI(profile.chatEndpoint).host.orEmpty().lowercase(Locale.US) }.getOrDefault("")
-        if (!isOfficialOpenAiHost(host)) return
+        if (!isOfficialOpenAiHost(host) && !profile.isChatGptCodex) return
         requestJson.put("prompt_cache_key", openAiPromptCacheKey(profile, model, conversationId))
-        if (!profile.useResponsesApi && supportsOpenAiExtendedPromptCache(model)) {
+        if (!profile.usesResponsesApi && supportsOpenAiExtendedPromptCache(model)) {
             requestJson.put("prompt_cache_retention", "24h")
         }
     }
@@ -1911,12 +1933,12 @@ class OpenAiAgent(
     }
 
     private fun openAiPromptCacheKey(profile: ApiProfile, model: String, conversationId: Long): String {
-        val instructions = if (profile.useResponsesApi) {
+        val instructions = if (profile.usesResponsesApi) {
             responsesInstructions(conversationId, profile)
         } else {
             providerSystemText(conversationId)
         }
-        val toolFingerprint = if (profile.useResponsesApi) {
+        val toolFingerprint = if (profile.usesResponsesApi) {
             sha256(stableJson(responsesToolDefinitions(conversationId, profile))).take(PROMPT_CACHE_KEY_HASH_CHARS)
         } else {
             toolFingerprintFor(conversationId)
@@ -2483,7 +2505,7 @@ class OpenAiAgent(
                     }
                     .put(JSONObject().put("role", "user").put("content", openAiParts))
                 if (supportsDeepSeekFilesApi(profile, model)) deepSeekFilesApi.replaceOpenAiInlineImages(messages, profile)
-                if (profile.useResponsesApi) {
+                if (profile.usesResponsesApi) {
                     val userMessage = messages.optJSONObject(messages.length() - 1) ?: JSONObject()
                     JSONObject()
                         .put("model", model)
@@ -2507,7 +2529,7 @@ class OpenAiAgent(
             .url(
                 when (profile.apiFormat) {
                     ApiProfile.API_FORMAT_GEMINI -> profile.geminiGenerateContentEndpoint(model)
-                    else -> if (profile.useResponsesApi) profile.responsesEndpoint else profile.chatEndpoint
+                    else -> if (profile.usesResponsesApi) profile.responsesEndpoint else profile.chatEndpoint
                 },
             )
             .addHeader("Content-Type", "application/json")
@@ -2522,7 +2544,7 @@ class OpenAiAgent(
         return client.newCall(requestBuilder.build().customizedFor(profile, model, settings.purePromptMode)).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) throwModelRequestHttpError(response.code, body)
-            extractModelResponseText(JSONObject(body), profile.apiFormat, profile.useResponsesApi)
+            extractModelResponseText(JSONObject(body), profile.apiFormat, profile.usesResponsesApi)
                 .trim()
                 .also { require(it.isNotBlank()) { "The visual supplement model returned no text." } }
         }

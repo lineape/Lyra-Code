@@ -17,18 +17,26 @@ data class ApiProfile(
     val presetPlanId: String = "",
     val modelRequestOverrides: Map<String, ModelRequestCustomization> = emptyMap(),
     val secondaryApiKeys: List<String> = emptyList(),
+    val chatGptAccountId: String = "",
+    val modelDisplayNames: Map<String, String> = emptyMap(),
 ) {
+    val isChatGpt: Boolean get() = chatGptAccountId.isNotBlank()
+    val isChatGptCodex: Boolean get() = chatGptAccountId.startsWith("codex:")
+    val chatGptBaseUrl: String get() = if (isChatGptCodex) ChatGptCodexProtocol.BASE else ChatGptProtocol.RESOURCE
+    val usesResponsesApi: Boolean get() = isChatGpt || useResponsesApi
+    fun modelDisplayName(model: String): String = modelDisplayNames[model]?.takeIf(String::isNotBlank) ?: model
+
     val allApiKeys: List<String>
-        get() = (listOf(apiKey) + secondaryApiKeys).map(String::trim).filter(String::isNotBlank).distinct()
+        get() = if (isChatGpt) emptyList() else (listOf(apiKey) + secondaryApiKeys).map(String::trim).filter(String::isNotBlank).distinct()
 
     val chatEndpoint: String
-        get() = "${baseUrl.trimEnd('/')}${normalizedChatPath(apiFormat, chatPath)}"
+        get() = if (isChatGpt) responsesEndpoint else "${baseUrl.trimEnd('/')}${normalizedChatPath(apiFormat, chatPath)}"
 
     val modelsEndpoint: String
-        get() = "${baseUrl.trimEnd('/')}/models"
+        get() = if (isChatGptCodex) ChatGptCodexProtocol.MODELS else if (isChatGpt) "${ChatGptProtocol.RESOURCE}/models" else "${baseUrl.trimEnd('/')}/models"
 
     val responsesEndpoint: String
-        get() = "${baseUrl.trimEnd('/')}/responses"
+        get() = if (isChatGpt) "$chatGptBaseUrl/responses" else "${baseUrl.trimEnd('/')}/responses"
 
     fun geminiGenerateContentEndpoint(model: String): String {
         val encoded = model.trim().removePrefix("models/")

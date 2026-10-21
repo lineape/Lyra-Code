@@ -52,6 +52,7 @@ import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.ErrorOutline
 import com.yukisoffd.lyracode.data.AppSettings
 import com.yukisoffd.lyracode.data.AppUpdateInfo
 import com.yukisoffd.lyracode.data.GITHUB_CONNECTIVITY_TEST_URL
@@ -121,6 +122,7 @@ internal fun SettingsScreen(
     onUpdateAvailabilityChange: (Boolean) -> Unit,
     settingsBackRequest: Int,
     externalAccountNotice: String?,
+    externalAccountTarget: String = "mengxi_account",
     onExternalAccountOpened: () -> Unit,
     externalGitHubAccelerationUrl: String?,
     onExternalGitHubAccelerationClosed: () -> Unit,
@@ -133,6 +135,11 @@ internal fun SettingsScreen(
     var detail by rememberSaveable { mutableStateOf<String?>(null) }
     var accountNotice by rememberSaveable { mutableStateOf("") }
     var accountPageVersion by rememberSaveable { mutableIntStateOf(0) }
+    var chatGptSelectedAccountId by rememberSaveable { mutableStateOf(settings.selectedProfile().chatGptAccountId) }
+    var chatGptSignInAccountId by rememberSaveable { mutableStateOf("") }
+    var chatGptAccountNotice by rememberSaveable { mutableStateOf("") }
+    var chatGptAccountNoticeFailed by rememberSaveable { mutableStateOf(false) }
+    var showChatGptInformation by rememberSaveable { mutableStateOf(false) }
     var handledBackRequest by remember { mutableIntStateOf(settingsBackRequest) }
     var mcpToolServerId by rememberSaveable { mutableStateOf("") }
     var mcpToolName by rememberSaveable { mutableStateOf("") }
@@ -147,6 +154,8 @@ internal fun SettingsScreen(
     val settingsListScroll = rememberScrollState()
     val aboutScrollState = rememberScrollState()
     val context = LocalContext.current
+    if (showChatGptInformation && detail == "chatgpt_account") ChatGptInformationDialog(
+        codex = chatGptSelectedAccountId.startsWith("codex:"), onDismiss = { showChatGptInformation = false })
     if (showUnsupportedDevice) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showUnsupportedDevice = false },
@@ -158,7 +167,8 @@ internal fun SettingsScreen(
         )
     }
     fun previousDetail(current: String?): String? = when (current) {
-        "mengxi_account" -> "profile"
+        "mengxi_account", "chatgpt_account" -> "profile"
+        "chatgpt_sign_in" -> "chatgpt_account"
         "mcp_tools" -> "mcp"
         "mcp_tool_detail" -> "mcp_tools"
         "web_search_blacklist", "deepseek_search", "deepseek_fetch" -> "web_search"
@@ -207,7 +217,7 @@ internal fun SettingsScreen(
         if (externalAccountNotice != null) {
             accountNotice = externalAccountNotice
             accountPageVersion++
-            detail = "mengxi_account"
+            detail = externalAccountTarget
             onExternalAccountOpened()
         }
     }
@@ -220,6 +230,7 @@ internal fun SettingsScreen(
     )
     BackHandler(enabled = !predictiveBackEnabled && detail != null) { navigateBackFromDetail() }
     LaunchedEffect(detail, context) {
+        if (detail != "chatgpt_account") showChatGptInformation = false
         if (detail != "model") modelNestedPageActive = false
         onDetailTitleChange(detail?.let { settingsDetailTitle(context, it) })
         skipNextTransition = false
@@ -274,6 +285,11 @@ internal fun SettingsScreen(
                                 style = MaterialTheme.typography.titleLarge,
                             )
                         },
+                        actions = {
+                            if (target == "chatgpt_account") IconButton(onClick = { showChatGptInformation = true }) {
+                                Icon(Icons.Outlined.ErrorOutline, contentDescription = context.getString(R.string.chatgpt_information))
+                            }
+                        },
                     )
                 },
             ) { pagePadding ->
@@ -292,7 +308,7 @@ internal fun SettingsScreen(
                     scroll = target !in setOf("model", "prompts", "memories", "licenses", "about", "device", "font", "font_library", "github_acceleration", "floating_page"),
                 ) {
                     when (target) {
-                    "profile" -> ProfileSettingsSummary(settings, controller::reloadProfiles) { notice ->
+                    "profile" -> ProfileSettingsSummary(settings, controller::reloadProfiles, { detail = "chatgpt_account" }) { notice ->
                         accountNotice = notice
                         accountPageVersion++
                         detail = "mengxi_account"
@@ -302,6 +318,20 @@ internal fun SettingsScreen(
                             accountNotice = ""
                             detail = "profile"
                         }
+                    }
+                    "chatgpt_account" -> ChatGptAccountPage(
+                        settings = settings, onServicesChanged = controller::reloadProfiles,
+                        onBeforeSignOut = controller::stopChatGptAccountRequests,
+                        selectedAccountId = chatGptSelectedAccountId, onSelectAccount = { chatGptSelectedAccountId = it },
+                        onOpenSignIn = { accountId -> chatGptSignInAccountId = accountId; detail = "chatgpt_sign_in" },
+                        initialNotice = chatGptAccountNotice, initialNoticeFailed = chatGptAccountNoticeFailed,
+                        onNoticeConsumed = { chatGptAccountNotice = ""; chatGptAccountNoticeFailed = false },
+                    )
+                    "chatgpt_sign_in" -> ChatGptSignInPage(settings, chatGptSignInAccountId, controller::reloadProfiles) { accountId, notice, failed ->
+                        chatGptSelectedAccountId = accountId
+                        chatGptAccountNotice = notice
+                        chatGptAccountNoticeFailed = failed
+                        detail = "chatgpt_account"
                     }
                     "model" -> ModelServiceSettings(
                         settings = settings,
@@ -688,6 +718,8 @@ internal fun SettingsDetailPage(
 internal fun settingsDetailTitle(context: Context, detail: String): String = when (detail) {
     "profile" -> context.getString(R.string.detail_profile)
     "mengxi_account" -> context.getString(R.string.new_api_account)
+    "chatgpt_account" -> context.getString(R.string.chatgpt_account_title)
+    "chatgpt_sign_in" -> context.getString(R.string.chatgpt_sign_in_title)
     "model" -> context.getString(R.string.detail_model)
     "topic_summary_model" -> context.getString(R.string.detail_topic_summary_model)
     "topic_summary_model_topic" -> uiText(R.string.ui_topic_summary_model)

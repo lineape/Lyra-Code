@@ -7,26 +7,30 @@ import org.json.JSONObject
 internal object ApiProfileJson {
     fun encode(profile: ApiProfile, includeSecrets: Boolean = true): JSONObject = JSONObject()
         .put("id", profile.id)
+        .put("chatGptAccountId", profile.chatGptAccountId)
+        .put("modelDisplayNames", JSONObject(profile.modelDisplayNames))
         .put("presetId", profile.presetId)
         .put("presetPlanId", profile.presetPlanId)
         .put("name", profile.name)
-        .put("apiKey", if (includeSecrets) profile.apiKey else "")
+        .put("apiKey", if (includeSecrets && !profile.isChatGpt) profile.apiKey else "")
         .put("secondaryApiKeys", JSONArray(if (includeSecrets) profile.allApiKeys.filter { it != profile.apiKey.trim() } else emptyList()))
-        .put("baseUrl", profile.baseUrl)
-        .put("chatPath", ApiProfile.normalizedChatPath(profile.apiFormat, profile.chatPath))
-        .put("apiFormat", profile.apiFormat)
+        .put("baseUrl", if (profile.isChatGpt) profile.chatGptBaseUrl else profile.baseUrl)
+        .put("chatPath", if (profile.isChatGpt) ApiProfile.DEFAULT_OPENAI_CHAT_PATH else ApiProfile.normalizedChatPath(profile.apiFormat, profile.chatPath))
+        .put("apiFormat", if (profile.isChatGpt) ApiProfile.API_FORMAT_OPENAI else profile.apiFormat)
         .put("selectedModel", profile.selectedModel)
         .put("savedModels", JSONArray(profile.savedModels.distinct()))
         .put("enabledModels", JSONArray(profile.enabledModels.distinct()))
-        .put("useResponsesApi", profile.apiFormat == ApiProfile.API_FORMAT_OPENAI && profile.useResponsesApi)
-        .put("modelRequestOverrides", ModelRequestCustomization.encodeMap(profile.modelRequestOverrides))
+        .put("useResponsesApi", profile.isChatGpt || (profile.apiFormat == ApiProfile.API_FORMAT_OPENAI && profile.usesResponsesApi))
+        .put("modelRequestOverrides", ModelRequestCustomization.encodeMap(if (profile.isChatGpt) emptyMap() else profile.modelRequestOverrides))
 
     fun decode(item: JSONObject, defaultBaseUrl: String, defaultModel: String, defaultName: String = "API"): ApiProfile {
         fun strings(name: String): List<String> {
             val array = item.optJSONArray(name) ?: return emptyList()
             return (0 until array.length()).map { array.optString(it).trim() }.filter(String::isNotBlank).distinct()
         }
-        val format = item.optString("apiFormat").ifBlank { ApiProfile.API_FORMAT_OPENAI }
+        val chatGptAccountId = item.optString("chatGptAccountId")
+        val isChatGpt = chatGptAccountId.isNotBlank()
+        val format = if (isChatGpt) ApiProfile.API_FORMAT_OPENAI else item.optString("apiFormat").ifBlank { ApiProfile.API_FORMAT_OPENAI }
         val models = strings("savedModels")
         val keys = (listOf(item.optString("apiKey")) + strings("secondaryApiKeys"))
             .map(String::trim).filter(String::isNotBlank).distinct()
@@ -37,23 +41,27 @@ internal object ApiProfileJson {
         return ApiProfile(
             id = item.optString("id").ifBlank { AppSettings.newId() },
             name = displayName,
-            apiKey = keys.firstOrNull().orEmpty(),
-            secondaryApiKeys = keys.drop(1),
-            baseUrl = item.optString("baseUrl").ifBlank { defaultBaseUrl },
+            chatGptAccountId = chatGptAccountId,
+            modelDisplayNames = item.optJSONObject("modelDisplayNames")?.let { names ->
+                names.keys().asSequence().associateWith { names.optString(it) }
+            }.orEmpty(),
+            apiKey = if (isChatGpt) "" else keys.firstOrNull().orEmpty(),
+            secondaryApiKeys = if (isChatGpt) emptyList() else keys.drop(1),
+            baseUrl = if (chatGptAccountId.startsWith("codex:")) ChatGptCodexProtocol.BASE else if (isChatGpt) ChatGptProtocol.RESOURCE else item.optString("baseUrl").ifBlank { defaultBaseUrl },
             chatPath = ApiProfile.normalizedChatPath(format, item.optString("chatPath")),
             apiFormat = format,
             selectedModel = if (item.has("selectedModel")) item.optString("selectedModel") else defaultModel,
             savedModels = models,
             enabledModels = if (item.has("enabledModels")) strings("enabledModels") else models,
-            useResponsesApi = format == ApiProfile.API_FORMAT_OPENAI && item.optBoolean("useResponsesApi"),
+            useResponsesApi = isChatGpt || (format == ApiProfile.API_FORMAT_OPENAI && item.optBoolean("useResponsesApi")),
             presetId = item.optString("presetId"),
             presetPlanId = item.optString("presetPlanId"),
-            modelRequestOverrides = ModelRequestCustomization.decodeMap(item.optJSONObject("modelRequestOverrides")),
+            modelRequestOverrides = if (isChatGpt) emptyMap() else ModelRequestCustomization.decodeMap(item.optJSONObject("modelRequestOverrides")),
         )
     }
 
     fun merge(current: ApiProfile, incoming: ApiProfile): ApiProfile {
-        val keys = (incoming.allApiKeys + current.allApiKeys).distinct()
+        val keys = if (incoming.isChatGpt) emptyList() else (incoming.allApiKeys + current.allApiKeys).distinct()
         return incoming.copy(
             id = current.id,
             apiKey = keys.firstOrNull().orEmpty(),

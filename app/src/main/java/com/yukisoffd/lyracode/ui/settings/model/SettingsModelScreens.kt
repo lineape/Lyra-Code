@@ -107,7 +107,7 @@ import kotlin.math.max
 
 
 @Composable
-internal fun ProfileSettingsSummary(settings: AppSettings, onServicesChanged: () -> Unit, onOpenAccount: (String) -> Unit) {
+internal fun ProfileSettingsSummary(settings: AppSettings, onServicesChanged: () -> Unit, onOpenChatGptAccount: () -> Unit, onOpenAccount: (String) -> Unit) {
     KimiCardBox {
         Row(verticalAlignment = Alignment.CenterVertically) {
             UserAvatar(settings.userAvatarPath, settings.userNickname.take(1).ifBlank { "L" }, Modifier.size(56.dp))
@@ -120,6 +120,7 @@ internal fun ProfileSettingsSummary(settings: AppSettings, onServicesChanged: ()
     }
     KimiSectionLabel(uiText(R.string.mengxi_third_party_accounts))
     KimiCardBox { NewApiAccountSection(settings, onServicesChanged, onOpenAccount) }
+    KimiCardBox { ChatGptAccountSection(settings, onOpenChatGptAccount) }
 }
 
 @Composable
@@ -508,7 +509,7 @@ internal fun MediaGenerationModelEditor(
     controller: ChatController,
     kind: MediaGenerationKind,
 ) {
-    val profiles = controller.profiles.toList()
+    val profiles = controller.profiles.filterNot { it.isChatGpt }
     val saved = remember(kind, controller.settingsRevision.intValue) { settings.mediaGenerationModel(kind) }
     var enabled by remember(kind) { mutableStateOf(saved.profileId.isNotBlank() && saved.model.isNotBlank()) }
     var profileId by remember(kind) {
@@ -704,7 +705,7 @@ internal fun ModelServiceSettings(
     var savedModels by remember(editKey) { mutableStateOf(current?.savedModels.orEmpty().joinToString("\n")) }
     var enabledModels by remember(editKey) { mutableStateOf(current?.enabledModels.orEmpty().toSet()) }
     var showEnabledModelsDialog by remember(editKey) { mutableStateOf(false) }
-    var useResponsesApi by remember(editKey) { mutableStateOf(current?.useResponsesApi == true) }
+    var useResponsesApi by remember(editKey) { mutableStateOf(current?.usesResponsesApi == true) }
     var advancedExpanded by remember(editKey) { mutableStateOf(draftNewProfile == null || draftPresetId == null) }
     var selectedReachabilityModels by remember(editKey) { mutableStateOf<Set<String>>(emptySet()) }
     var providerReachabilityResult by remember(editKey) { mutableStateOf<ProviderReachabilityResult?>(null) }
@@ -751,6 +752,10 @@ internal fun ModelServiceSettings(
             ?: enabled.firstOrNull().orEmpty()
         return ApiProfile(
             id = current?.id ?: AppSettings.newId(),
+            chatGptAccountId = current?.chatGptAccountId.orEmpty(),
+            modelDisplayNames = if (current?.isChatGpt == true) models.associateWith {
+                settings.chatGptAccount.cachedModelNames(current.chatGptAccountId)[it] ?: current.modelDisplayName(it)
+            } else current?.modelDisplayNames.orEmpty(),
             presetId = current?.presetId.orEmpty(),
             presetPlanId = current?.presetPlanId.orEmpty(),
             name = name.ifBlank { uiText(R.string.label_unnamed_platform) },
@@ -836,13 +841,14 @@ internal fun ModelServiceSettings(
     }
     if (showEnabledModelsDialog) {
         val selectableModels = remember(savedModels, enabledModels, model) {
-            (savedModels.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.toList() + enabledModels + model.trim())
+            val choices = (savedModels.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.toList() + enabledModels + model.trim())
                 .filter { it.isNotBlank() }
                 .distinct()
-                .sorted()
+            if (current?.isChatGpt == true) choices else choices.sorted()
         }
         EnabledModelsDialog(
             models = selectableModels,
+            displayNames = current?.modelDisplayNames.orEmpty(),
             enabledModels = enabledModels,
             onEnabledModelsChange = { enabledModels = it },
             onDismiss = { showEnabledModelsDialog = false },
@@ -882,7 +888,7 @@ internal fun ModelServiceSettings(
                     else -> uiText(R.string.detail_model)
                 }, style = MaterialTheme.typography.titleLarge) },
                 actions = {
-                    if (page == 2) TextButton(onClick = { showRequestCustomization = true }) { Text(uiText(R.string.request_custom)) }
+                    if (page == 2 && current?.isChatGpt != true) TextButton(onClick = { showRequestCustomization = true }) { Text(uiText(R.string.request_custom)) }
                 },
             )
         Box(
@@ -1049,6 +1055,9 @@ internal fun ModelServiceSettings(
                         }
                     }
                     OutlinedTextField(value = name, onValueChange = { name = it }, modifier = Modifier.fillMaxWidth(), label = { Text(uiText(R.string.label_service_name)) }, singleLine = true)
+                    if (current?.isChatGpt == true) {
+                        Text(uiText(R.string.chatgpt_service_description), color = KimiMuted, style = MaterialTheme.typography.bodySmall)
+                    } else {
                     ProviderKeysEditor(key, secondaryKeys) { primary, secondary -> key = primary; secondaryKeys = secondary }
                     Surface(
                         modifier = Modifier
@@ -1162,8 +1171,9 @@ internal fun ModelServiceSettings(
                             )
                         }
                     }
-                    OutlinedTextField(value = model, onValueChange = { model = it }, modifier = Modifier.fillMaxWidth(), label = { Text(uiText(R.string.label_default_model)) }, singleLine = true)
-                    OutlinedTextField(value = savedModels, onValueChange = { savedModels = it }, modifier = Modifier.fillMaxWidth(), label = { Text(uiText(R.string.detected_models_one_per_line)) }, minLines = 3)
+                    }
+                    OutlinedTextField(value = if (current?.isChatGpt == true) current.modelDisplayName(model) else model, onValueChange = { model = it }, readOnly = current?.isChatGpt == true, modifier = Modifier.fillMaxWidth(), label = { Text(uiText(R.string.label_default_model)) }, singleLine = true)
+                    if (current?.isChatGpt != true) OutlinedTextField(value = savedModels, onValueChange = { savedModels = it }, modifier = Modifier.fillMaxWidth(), label = { Text(uiText(R.string.detected_models_one_per_line)) }, minLines = 3)
                     OutlinedButton(
                         enabled = savedModels.isNotBlank() || enabledModels.isNotEmpty(),
                         onClick = { showEnabledModelsDialog = true },
@@ -1203,6 +1213,10 @@ internal fun ModelServiceSettings(
                                                 status = uiText(R.string.notice_no_models_fetched)
                                             } else {
                                                 savedModels = distinct.joinToString("\n")
+                                                if (current?.isChatGpt == true) {
+                                                    enabledModels = enabledModels.intersect(distinct.toSet()).ifEmpty { distinct.take(1).toSet() }
+                                                    if (model !in enabledModels) model = enabledModels.firstOrNull().orEmpty()
+                                                }
                                                 val updated = draftProfile(savedModelsOverride = distinct)
                                                 val updatedProfiles = if (editingIndex >= 0) {
                                                     profiles.mapIndexed { index, item -> if (index == editingIndex) updated else item }
@@ -1287,11 +1301,12 @@ internal fun EnabledModelsDialog(
     onEnabledModelsChange: (Set<String>) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
+    displayNames: Map<String, String> = emptyMap(),
 ) {
     var query by rememberSaveable { mutableStateOf("") }
-    val filtered = remember(models, query) {
+    val filtered = remember(models, query, displayNames) {
         val keyword = query.trim()
-        if (keyword.isBlank()) models else models.filter { it.contains(keyword, ignoreCase = true) }
+        if (keyword.isBlank()) models else models.filter { it.contains(keyword, ignoreCase = true) || displayNames[it].orEmpty().contains(keyword, ignoreCase = true) }
     }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1340,7 +1355,7 @@ internal fun EnabledModelsDialog(
                                         onEnabledModelsChange(if (checked) enabledModels - modelName else enabledModels + modelName)
                                     },
                                 )
-                                Text(modelName, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text(displayNames[modelName] ?: modelName, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }

@@ -207,6 +207,8 @@ internal fun LyraCodeApp(
     var settingsDetailTitle by rememberSaveable { mutableStateOf<String?>(null) }
     var settingsBackRequest by remember { mutableIntStateOf(0) }
     var externalAccountNotice by rememberSaveable { mutableStateOf<String?>(null) }
+    var externalAccountTarget by rememberSaveable { mutableStateOf("mengxi_account") }
+    ChatGptUsageDialog(settings, settings.selectedProfile().chatGptAccountId)
     var conversationDetailsExpanded by rememberSaveable { mutableStateOf(false) }
     var showStatsAboutDialog by rememberSaveable { mutableStateOf(false) }
     var skipNextPageTransition by remember { mutableStateOf(false) }
@@ -507,6 +509,15 @@ internal fun LyraCodeApp(
                             scope.launch {
                                 drawerState.close()
                                 externalAccountNotice = notice
+                                externalAccountTarget = "mengxi_account"
+                                selectedPage = PAGE_SETTINGS
+                            }
+                        },
+                        onOpenChatGptAccount = {
+                            scope.launch {
+                                drawerState.close()
+                                externalAccountTarget = "chatgpt_account"
+                                externalAccountNotice = ""
                                 selectedPage = PAGE_SETTINGS
                             }
                         },
@@ -673,6 +684,7 @@ internal fun LyraCodeApp(
                             onUpdateAvailabilityChange = { aboutUpdateAvailable = it },
                             settingsBackRequest = settingsBackRequest,
                             externalAccountNotice = externalAccountNotice,
+                            externalAccountTarget = externalAccountTarget,
                             onExternalAccountOpened = { externalAccountNotice = null },
                             externalGitHubAccelerationUrl = startupAccelerationUrl,
                             onExternalGitHubAccelerationClosed = {

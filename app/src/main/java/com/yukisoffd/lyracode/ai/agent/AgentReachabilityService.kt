@@ -100,6 +100,8 @@ internal class AgentReachabilityService(
     }
 
     private fun modelReachabilityRequest(profile: ApiProfile, model: String): Request {
+        // Catalog admission checks avoid spending subscription quota on a one-token probe.
+        if (profile.isChatGpt) return providerReachabilityRequest(profile)
         return when (profile.apiFormat) {
             ApiProfile.API_FORMAT_ANTHROPIC -> {
                 val body = JSONObject()
@@ -130,7 +132,7 @@ internal class AgentReachabilityService(
                     .build()
             }
             else -> {
-                val requestJson = if (profile.useResponsesApi) {
+                val requestJson = if (profile.usesResponsesApi) {
                     JSONObject()
                         .put("model", model)
                         .put("input", "ping")
@@ -153,7 +155,7 @@ internal class AgentReachabilityService(
                     .toString()
                     .toRequestBody("application/json".toMediaType())
                 Request.Builder()
-                    .url(if (profile.useResponsesApi) profile.responsesEndpoint else profile.chatEndpoint)
+                    .url(if (profile.usesResponsesApi) profile.responsesEndpoint else profile.chatEndpoint)
                     .apply { if (profile.apiKey.isNotBlank()) addHeader("Authorization", "Bearer ${profile.apiKey}") }
                     .addHeader("Content-Type", "application/json")
                     .post(body)

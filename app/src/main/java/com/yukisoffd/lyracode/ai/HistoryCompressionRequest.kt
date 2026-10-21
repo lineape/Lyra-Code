@@ -47,7 +47,7 @@ internal fun Request.forCompressionResponse(profile: ApiProfile, budget: Int): R
     if (profile.apiFormat == ApiProfile.API_FORMAT_OPENAI &&
         (isDeepSeekApiProfile(profile) || payload.optString("model").contains("deepseek", ignoreCase = true) ||
             isMiMoCompressionModel(profile, payload.optString("model")))) {
-        if (profile.useResponsesApi) payload.put("reasoning", JSONObject().put("effort", "none"))
+        if (profile.usesResponsesApi) payload.put("reasoning", JSONObject().put("effort", "none"))
         else {
             payload.put("thinking", JSONObject().put("type", "disabled"))
             payload.remove("reasoning_effort")
@@ -59,7 +59,7 @@ internal fun Request.forCompressionResponse(profile: ApiProfile, budget: Int): R
             payload.put("generationConfig", config.put("maxOutputTokens", budget))
         }
         ApiProfile.API_FORMAT_ANTHROPIC -> payload.put("max_tokens", budget)
-        else -> if (profile.useResponsesApi) payload.put("max_output_tokens", budget) else {
+        else -> if (profile.usesResponsesApi) payload.put("max_output_tokens", budget) else {
             if (payload.has("max_completion_tokens")) {
                 payload.remove("max_tokens")
                 payload.put("max_completion_tokens", budget)
@@ -81,7 +81,7 @@ internal fun historyCompressionPayload(profile: ApiProfile, model: String, instr
             .put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", input)))))
             .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", instruction))))
             .put("generationConfig", JSONObject().put("temperature", 0.1).put("maxOutputTokens", budget))
-        else -> if (profile.useResponsesApi) {
+        else -> if (profile.usesResponsesApi) {
             JSONObject().put("model", model).put("instructions", instruction).put("input", input)
                 .put("max_output_tokens", budget).put("store", false).put("stream", false)
                 .apply {
@@ -121,7 +121,7 @@ internal fun extractCompressionSummary(root: JSONObject, profile: ApiProfile): S
     require(root.optString("status") !in setOf("failed", "incomplete", "queued", "in_progress")) {
         "压缩模型未完成摘要（${root.optString("status")} / $reason），原上下文已保留"
     }
-    val text = extractModelResponseText(root, profile.apiFormat, profile.useResponsesApi).trim()
+    val text = extractModelResponseText(root, profile.apiFormat, profile.usesResponsesApi).trim()
     require(text.isNotBlank()) {
         "压缩模型没有返回摘要正文（结束原因：${reason.ifBlank { "未提供" }}）。可能只返回了思考内容或被拦截；原上下文已保留。"
     }

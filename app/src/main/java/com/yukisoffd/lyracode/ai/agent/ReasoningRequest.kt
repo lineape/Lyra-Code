@@ -10,7 +10,7 @@ internal fun applyReasoningDepth(request: JSONObject, profile: ApiProfile, depth
     if (depth == AppSettings.REASONING_AUTO || depth !in AppSettings.reasoningDepthValues) return
     when (profile.apiFormat) {
         ApiProfile.API_FORMAT_OPENAI -> {
-            if (profile.useResponsesApi) {
+            if (profile.usesResponsesApi) {
                 val reasoning = request.optJSONObject("reasoning") ?: JSONObject()
                 reasoning.put("effort", depth)
                 if (!reasoning.has("summary")) reasoning.put("summary", "auto")

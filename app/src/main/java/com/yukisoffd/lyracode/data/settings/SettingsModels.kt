@@ -13,6 +13,7 @@ data class ApiProfile(
     val savedModels: List<String>,
     val enabledModels: List<String> = savedModels,
     val useResponsesApi: Boolean = false,
+    val gzipRequestBodies: Boolean = true,
     val presetId: String = "",
     val presetPlanId: String = "",
     val modelRequestOverrides: Map<String, ModelRequestCustomization> = emptyMap(),

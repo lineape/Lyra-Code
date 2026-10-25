@@ -47,6 +47,8 @@ internal class ModelHttpAudit(private val sink: HttpAuditSink, private val tempD
         write(id, "request.headers", headers(request.headers))
         runCatching {
             val body = request.body ?: return@runCatching
+            // An encoded body is unreadable here; keep the plain JSON that application interception recorded.
+            if (observed && request.header("Content-Encoding") != null) return@runCatching
             if (body.isDuplex() || body.isOneShot()) {
                 write(id, "request.body", "[non-repeatable body; not read by logger]")
             } else {

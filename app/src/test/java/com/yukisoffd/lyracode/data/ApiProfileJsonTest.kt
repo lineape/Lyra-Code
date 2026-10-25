@@ -29,6 +29,11 @@ class ApiProfileJsonTest {
         assertEquals("legacy", restored.apiKey)
         assertTrue(restored.secondaryApiKeys.isEmpty())
         assertEquals(listOf("a"), restored.enabledModels)
+        assertTrue(restored.gzipRequestBodies)
+    }
+
+    @Test fun disabledRequestCompressionSurvivesStorageAndBackup() {
+        assertFalse(decode(ApiProfileJson.encode(profile.copy(gzipRequestBodies = false), includeSecrets = false)).gzipRequestBodies)
     }
 
     @Test fun incompleteModelSyncDoesNotInventASelectedModel() {

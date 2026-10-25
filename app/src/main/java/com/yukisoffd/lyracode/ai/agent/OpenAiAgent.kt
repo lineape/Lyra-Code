@@ -125,6 +125,7 @@ class OpenAiAgent(
         .addInterceptor(ChatGptAuthInterceptor { settings.chatGptAccount })
         .addInterceptor(ProviderKeyInterceptor())
         .addInterceptor(httpAudit.application)
+        .addInterceptor(GzipRequestInterceptor())
         .addNetworkInterceptor(httpAudit.network)
         .addNetworkInterceptor(ChatGptRouteGuard())
         .connectTimeout(20, TimeUnit.SECONDS)

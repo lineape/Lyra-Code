@@ -1701,6 +1701,8 @@ Revocation stops new access through that permission but does not automatically e
     <string name="file_privileged_disable">Disable</string>
     <string name="file_privileged_disabled">Restricted directory access disabled</string>
     <string name="responses_api_enabled">Use Responses API</string>
+    <string name="gzip_request_bodies_enabled">Compress large requests (gzip)</string>
+    <string name="gzip_request_bodies_hint">Roughly halves the upload of a long conversation. If the server refuses compressed requests, Lyra resends them uncompressed.</string>
     <string name="conversation_details">Conversation details</string>
     <string name="conversation_title_label">Conversation title</string>
     <string name="current_model_label">Current model</string>

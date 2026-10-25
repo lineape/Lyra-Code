@@ -17,6 +17,7 @@ import java.net.InetSocketAddress
 import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
 class ModelHttpAuditTest {
@@ -71,6 +72,44 @@ class ModelHttpAuditTest {
             assertEquals(responseText, log["response.body"])
             assertEquals("Complete (EOF)", log["response.state"])
             assertTrue(dir.listFiles().orEmpty().isEmpty())
+        } finally { server.stop(0); client.connectionPool.evictAll(); dir.deleteRecursively() }
+    }
+
+    @Test fun gzippedRequestsAreLoggedAsPlainJsonAndRefusalsAreResentPlain() {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        val received = mutableListOf<Pair<String?, String>>()
+        server.createContext("/chat") { exchange ->
+            val encoding = exchange.requestHeaders.getFirst("Content-Encoding")
+            val bytes = exchange.requestBody.readBytes()
+            val text = if (encoding == "gzip") GZIPInputStream(bytes.inputStream()).readBytes().decodeToString() else bytes.decodeToString()
+            received += encoding to text
+            val refuse = encoding == "gzip" && exchange.requestURI.path.endsWith("/refuse")
+            val reply = (if (refuse) "Unsupported Media Type" else "{}").toByteArray()
+            exchange.sendResponseHeaders(if (refuse) 415 else 200, reply.size.toLong())
+            exchange.responseBody.use { it.write(reply) }
+        }
+        server.start()
+        val sink = MemorySink()
+        val dir = Files.createTempDirectory("audit-gzip").toFile()
+        val audit = ModelHttpAudit(sink, dir)
+        val client = OkHttpClient.Builder().addInterceptor(audit.application).addInterceptor(GzipRequestInterceptor())
+            .addNetworkInterceptor(audit.network).build()
+        try {
+            val profile = ApiProfile("test", "test", "fixture-key", "http://127.0.0.1:${server.address.port}", selectedModel = "test", savedModels = listOf("test"))
+            val payload = JSONObject().put("model", "test").put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", "你好 ".repeat(5_000))))
+            fun post(path: String) = Request.Builder().url("${profile.baseUrl}$path").header("Authorization", "Bearer fixture-key")
+                .post(payload.toString().toRequestBody("application/json".toMediaType())).build().customizedFor(profile, "test")
+
+            client.newCall(post("/chat")).execute().use { assertEquals(200, it.code) }
+            val sent = received.single().second
+            assertEquals("gzip", received.single().first)
+            assertEquals(sent, sink.records.values.single()["request.body"])
+            assertTrue(sink.records.values.single().getValue("request.headers").contains("gzip"))
+
+            client.newCall(post("/chat/refuse")).execute().use { assertEquals(200, it.code) }
+            assertEquals(listOf("gzip", null), received.drop(1).map { it.first })
+            assertEquals(listOf(sent, sent), received.drop(1).map { it.second })
+            assertEquals(listOf(sent, sent), sink.records.values.drop(1).map { it["request.body"] })
         } finally { server.stop(0); client.connectionPool.evictAll(); dir.deleteRecursively() }
     }
 

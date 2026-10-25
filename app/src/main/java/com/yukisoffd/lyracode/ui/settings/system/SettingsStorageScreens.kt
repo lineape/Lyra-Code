@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Build
 import android.os.storage.StorageManager
 import android.system.Os
+import com.yukisoffd.lyracode.data.UpdateManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -48,6 +49,7 @@ internal fun StorageCacheSettings() {
     val scope = rememberCoroutineScope()
     var scan by remember { mutableStateOf<StorageScanResult?>(null) }
     var scanning by remember { mutableStateOf(true) }
+    var cleaning by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
 
     fun refresh(completionStatus: String? = null) {
@@ -66,6 +68,26 @@ internal fun StorageCacheSettings() {
         scanning = false
     }
 
+    fun clean(items: List<StorageCacheItem>, success: String) {
+        if (scanning || cleaning) return
+        cleaning = true
+        status = uiText(R.string.ui_clearing_cache)
+        scope.launch {
+            val failures = withContext(Dispatchers.IO) {
+                items.sumOf { item ->
+                    if (item.updatePackages) {
+                        if (UpdateManager(context).clearDownloadedApks().isFailure) 1 else 0
+                    } else {
+                        item.cleanTargets.count { deleteCacheTarget(it).isFailure }
+                    }
+                }
+            }
+            status = if (failures == 0) success else context.getString(R.string.storage_cleanup_failed, failures)
+            cleaning = false
+            refresh()
+        }
+    }
+
     val currentScan = scan
     val calculating = uiText(R.string.file_property_calculating_size)
     KimiCardBox {
@@ -74,6 +96,8 @@ internal fun StorageCacheSettings() {
         KimiMenuRow(Icons.Default.Storage, uiText(R.string.menu_total_usage), currentScan?.let { formatBytes(it.totalBytes) } ?: calculating)
         KimiDivider()
         KimiMenuRow(Icons.Default.Android, uiText(R.string.menu_app_package), currentScan?.let { formatBytes(it.appBytes) } ?: calculating)
+        KimiDivider()
+        KimiMenuRow(Icons.Default.Android, uiText(R.string.menu_installed_apk_files), currentScan?.let { formatBytes(it.installedApkBytes) } ?: calculating)
         KimiDivider()
         KimiMenuRow(Icons.Default.Folder, uiText(R.string.menu_app_data), currentScan?.let { formatBytes(it.dataBytes) } ?: calculating)
         KimiDivider()
@@ -92,16 +116,8 @@ internal fun StorageCacheSettings() {
                 }
                 if (item.cleanable && item.bytes > 0L) {
                     OutlinedButton(
-                        onClick = {
-                            status = uiText(R.string.storage_clearing_item, item.title)
-                            scope.launch(Dispatchers.IO) {
-                                deleteCacheTarget(item.file)
-                                withContext(Dispatchers.Main) {
-                                    status = uiText(R.string.status_cleaned, item.title)
-                                    refresh()
-                                }
-                            }
-                        },
+                        enabled = !scanning && !cleaning,
+                        onClick = { clean(listOf(item), uiText(R.string.status_cleaned, item.title)) },
                         shape = KimiPillShape,
                     ) { Text(uiText(R.string.action_clean)) }
                 }
@@ -110,21 +126,14 @@ internal fun StorageCacheSettings() {
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Button(
-            enabled = !scanning,
+            enabled = !scanning && !cleaning,
             onClick = { refresh(uiText(R.string.status_scan_complete)) },
             shape = KimiPillShape,
         ) { Text(uiText(R.string.action_rescan)) }
         OutlinedButton(
-            enabled = !scanning && (currentScan?.cleanableBytes ?: 0L) > 0L,
+            enabled = !scanning && !cleaning && (currentScan?.cleanableBytes ?: 0L) > 0L,
             onClick = {
-                status = uiText(R.string.ui_clearing_cache)
-                scope.launch(Dispatchers.IO) {
-                    currentScan?.items.orEmpty().filter { it.cleanable }.forEach { deleteCacheTarget(it.file) }
-                    withContext(Dispatchers.Main) {
-                        status = uiText(R.string.status_cache_cleaned)
-                        refresh()
-                    }
-                }
+                clean(currentScan?.items.orEmpty().filter { it.cleanable }, uiText(R.string.status_cache_cleaned))
             },
             shape = KimiPillShape,
         ) { Text(uiText(R.string.action_clean_all_cache)) }
@@ -140,6 +149,7 @@ internal data class StorageScanResult(
     val cacheBytes: Long,
     val cleanableBytes: Long,
     val items: List<StorageCacheItem>,
+    val installedApkBytes: Long = 0L,
 )
 
 internal data class StorageCacheItem(
@@ -149,15 +159,20 @@ internal data class StorageCacheItem(
     val bytes: Long,
     val fileCount: Int,
     val cleanable: Boolean,
+    val cleanTargets: List<File> = listOf(file),
+    val updatePackages: Boolean = false,
 )
 
 internal fun scanStorageUsage(context: Context): StorageScanResult = runCatching {
+    val updater = UpdateManager(context)
+    updater.pendingDownloadedApk()
     val systemStats = querySystemStorageStats(context)
     val totals = resolveStorageTotals(systemStats) {
         val recursiveAppBytes = safeInstalledAppBytes(context)
         val recursiveCacheBytes = saturatedSum(
             safeDirSize(context.cacheDir),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) safeDirSize(context.codeCacheDir) else 0L,
+            *context.externalCacheDirs.filterNotNull().map { safeDirSize(it) }.toLongArray(),
         )
         val recursiveDataRootBytes = saturatedSum(
             safeDirSize(File(context.applicationInfo.dataDir)),
@@ -171,6 +186,19 @@ internal fun scanStorageUsage(context: Context): StorageScanResult = runCatching
         )
     }
     val items = buildList {
+        val packages = updater.apkStorage.artifacts()
+        val packageUsage = safeTreeUsage(packages)
+        val packageDirectory = updater.apkStorage.downloadDirectory ?: context.filesDir
+        add(StorageCacheItem(
+            title = uiText(R.string.cache_update_packages),
+            file = packageDirectory,
+            path = updater.apkStorage.downloadDirectory?.absolutePath ?: context.getString(R.string.update_storage_unavailable),
+            bytes = packageUsage.bytes,
+            fileCount = packageUsage.fileCount,
+            cleanable = true,
+            cleanTargets = packages,
+            updatePackages = true,
+        ))
         add(storageItem(uiText(R.string.cache_ai_response), File(context.cacheDir, "ai_response_cache"), cleanable = true))
         add(storageItem(uiText(R.string.cache_crop_image), File(context.cacheDir, "uploads"), cleanable = true))
         add(storageItem(uiText(R.string.cache_camera_upload), File(context.cacheDir, "upload_crop"), cleanable = true))
@@ -186,8 +214,8 @@ internal fun scanStorageUsage(context: Context): StorageScanResult = runCatching
         }
     }
     val total = saturatedSum(totals.appBytes, totals.dataBytes, totals.cacheBytes)
-    val cleanable = saturatedSum(*items.filter { it.cleanable }.map { it.bytes }.toLongArray())
-    StorageScanResult(total, totals.appBytes, totals.dataBytes, totals.cacheBytes, cleanable, items)
+    val cleanable = safeTreeUsage(items.filter { it.cleanable }.flatMap { it.cleanTargets }).bytes
+    StorageScanResult(total, totals.appBytes, totals.dataBytes, totals.cacheBytes, cleanable, items, installedApkBytes(context))
 }.getOrDefault(StorageScanResult(0L, 0L, 0L, 0L, 0L, emptyList()))
 
 internal data class SystemStorageStats(val appBytes: Long, val dataBytes: Long, val cacheBytes: Long)
@@ -234,6 +262,16 @@ internal fun safeInstalledAppBytes(context: Context): Long = runCatching {
     saturatedSum(*files.distinctBy { it.absolutePath }.map { safeDirSize(it) }.toLongArray())
 }.getOrDefault(0L)
 
+private fun installedApkBytes(context: Context): Long = installedApkFileBytes(buildList {
+    add(File(context.applicationInfo.sourceDir))
+    context.applicationInfo.splitSourceDirs?.forEach { add(File(it)) }
+})
+
+internal fun installedApkFileBytes(files: List<File>): Long = saturatedSum(
+    *files.distinctBy { runCatching { it.canonicalPath }.getOrDefault(it.absolutePath) }
+        .filter { it.isFile }.map { it.length() }.toLongArray(),
+)
+
 internal fun storageItem(title: String, file: File, cleanable: Boolean): StorageCacheItem {
     val usage = safeTreeUsage(file)
     return StorageCacheItem(
@@ -253,14 +291,18 @@ internal fun safeDirSize(file: File): Long = safeTreeUsage(file).bytes
 internal fun safeFileCount(file: File): Int = safeTreeUsage(file).fileCount
 
 /** Iterative, no-follow traversal that also counts hard-linked inodes only once. */
-internal fun safeTreeUsage(file: File): StorageTreeUsage = runCatching {
+internal fun safeTreeUsage(file: File): StorageTreeUsage = safeTreeUsage(listOf(file))
+
+internal fun safeTreeUsage(files: List<File>): StorageTreeUsage = runCatching {
     val pending = ArrayDeque<Path>()
     val visitedKeys = HashSet<Any>()
-    pending.add(file.toPath())
+    val visitedPaths = HashSet<Path>()
+    files.forEach { pending.add(it.toPath().toAbsolutePath().normalize()) }
     var bytes = 0L
     var fileCount = 0
     while (pending.isNotEmpty()) {
         val path = pending.removeLast()
+        if (!visitedPaths.add(path)) continue
         val attributes = runCatching {
             Files.readAttributes(path, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
         }.getOrNull() ?: continue
@@ -284,19 +326,21 @@ private fun storageFileKey(path: Path, attributes: BasicFileAttributes): Any? =
         AndroidStorageFileKey(stat.st_dev, stat.st_ino)
     }.getOrNull()
 
-internal fun deleteCacheTarget(file: File) {
-    runCatching {
+internal fun deleteCacheTarget(file: File): Result<Unit> = runCatching {
+        if (Files.notExists(file.toPath(), LinkOption.NOFOLLOW_LINKS)) return@runCatching
         val attributes = Files.readAttributes(
             file.toPath(),
             BasicFileAttributes::class.java,
             LinkOption.NOFOLLOW_LINKS,
         )
         if (attributes.isDirectory) {
-            file.listFiles().orEmpty().forEach { deleteTreeNoFollow(it.toPath()) }
+            val children = file.listFiles() ?: throw IOException("Cannot list cache directory: ${file.absolutePath}")
+            val failures = children.mapNotNull { child -> runCatching { deleteTreeNoFollow(child.toPath()) }.exceptionOrNull() }
+            if (failures.isNotEmpty()) throw IOException("Cannot remove ${failures.size} cache entries", failures.first())
         } else {
             Files.deleteIfExists(file.toPath())
         }
-    }
+        Unit
 }
 
 private fun deleteTreeNoFollow(root: Path) {

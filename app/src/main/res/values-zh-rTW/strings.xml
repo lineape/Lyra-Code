@@ -840,11 +840,15 @@
     <!-- Storage -->
     <string name="title_storage_usage">儲存佔用</string>
     <string name="menu_total_usage">應用總佔用</string>
-    <string name="menu_app_package">應用安裝包</string>
+    <string name="menu_app_package">已安裝應用程式碼與資源</string>
+    <string name="menu_installed_apk_files">目前 APK 檔案</string>
+    <string name="cache_update_packages">下載的更新安裝包</string>
+    <string name="storage_cleanup_failed">有 %1$d 項未能清理，請檢查檔案占用或存取權限後重試。</string>
+    <string name="update_storage_unavailable">外部應用檔案目錄無法使用</string>
     <string name="menu_app_data">應用資料</string>
     <string name="menu_system_cache">系統快取</string>
     <string name="menu_cleanable_cache">可安全清理快取</string>
-    <string name="storage_explanation">總佔用優先採用 Android 系統儲存統計；僅在系統統計無法使用時採用不跟隨連結的本機掃描。清理範圍僅包含臨時上傳、圖片裁剪、拍照預覽、AI 響應磁碟快取，以及應用內更新後遺留的舊版本安裝包；不會刪除 PRoot 環境、歷史對話、模型配置、API Key、MCP/SSH、Skills、頭像或工作目錄檔案。</string>
+    <string name="storage_explanation">已安裝應用體積包含 APK、本機程式庫及系統編譯產物，可能大於下載包；目前 APK 檔案與下載的更新包分開列出。清理會刪除臨時上傳、圖片裁剪、拍照預覽、AI 回應快取和下載的更新包（含待安裝包），需要時可重新下載。不會刪除 PRoot 環境、歷史對話、模型配置、API Key、MCP/SSH、Skills、頭像或工作目錄檔案。</string>
     <string name="label_file_count_size">%1$d 個檔案</string>
     <string name="action_clean">清理</string>
     <string name="status_cleaning">正在清理 %1$s…</string>

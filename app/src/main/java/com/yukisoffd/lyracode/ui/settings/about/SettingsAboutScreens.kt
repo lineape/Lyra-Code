@@ -284,7 +284,10 @@ internal fun AboutSoftwareScreen(
     var updateInfo by updateInfoState
     var downloadProgress by remember { mutableStateOf<UpdateDownloadProgress?>(null) }
     var downloading by remember { mutableStateOf(false) }
-    var pendingApk by remember { mutableStateOf(updateManager.pendingDownloadedApk()) }
+    var pendingApk by remember { mutableStateOf<java.io.File?>(null) }
+    LaunchedEffect(updateManager) {
+        pendingApk = withContext(Dispatchers.IO) { updateManager.pendingDownloadedApk() }
+    }
     var updatePromptDisabled by remember { mutableStateOf(updateManager.updatePromptDisabled()) }
     val easterEggSession = remember(context) { UpdateManifestEasterEggRuntime.takeSession(context) }
     var easterEggPrompt by remember { mutableStateOf<UpdateManifestEasterEggPrompt?>(null) }
@@ -332,13 +335,15 @@ internal fun AboutSoftwareScreen(
         onDispose { easterEggSession.reset() }
     }
     val installPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        val apk = updateManager.pendingDownloadedApk()
-        pendingApk = apk
-        if (apk != null && !updateManager.needsInstallPermission()) {
-            runCatching { context.startActivity(updateManager.installIntent(apk)) }
-                .onFailure { notice = it.message.orEmpty().ifBlank { uiText(R.string.notice_cannot_open_installer) } }
-        } else if (apk != null) {
-            notice = uiText(R.string.ui_permission_is_not_complete_you_can_tap_continue_installation)
+        scope.launch {
+            val apk = withContext(Dispatchers.IO) { updateManager.pendingDownloadedApk() }
+            pendingApk = apk
+            if (apk != null && !updateManager.needsInstallPermission()) {
+                runCatching { context.startActivity(updateManager.installIntent(apk)) }
+                    .onFailure { notice = it.message.orEmpty().ifBlank { uiText(R.string.notice_cannot_open_installer) } }
+            } else if (apk != null) {
+                notice = uiText(R.string.ui_permission_is_not_complete_you_can_tap_continue_installation)
+            }
         }
     }
 
@@ -836,7 +841,7 @@ internal fun AboutLogoHeader() {
         val blue = backgroundArgb and 0xFF
         (0.299 * red + 0.587 * green + 0.114 * blue) < 128.0
     }
-    val logoAsset = if (isDark) "img/logo-white.png" else "img/logo-black.png"
+    val logoAsset = if (isDark) "img/logo-white.webp" else "img/logo-black.webp"
     val logoBitmap = remember(logoAsset) {
         runCatching {
             context.assets.open(logoAsset).use(BitmapFactory::decodeStream)

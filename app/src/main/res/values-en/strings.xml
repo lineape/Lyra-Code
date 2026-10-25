@@ -802,11 +802,15 @@
     <string name="font_name_system">Font Name System</string>
     <string name="title_storage_usage">Storage Usage</string>
     <string name="menu_total_usage">Menu Total Usage</string>
-    <string name="menu_app_package">Menu App Package</string>
+    <string name="menu_app_package">Installed app code and resources</string>
+    <string name="menu_installed_apk_files">Current APK files</string>
+    <string name="cache_update_packages">Downloaded update packages</string>
+    <string name="storage_cleanup_failed">Could not clean %1$d items. Check access permissions or files in use, then retry.</string>
+    <string name="update_storage_unavailable">External app files are unavailable</string>
     <string name="menu_app_data">Menu App Data</string>
     <string name="menu_system_cache">Menu System Cache</string>
     <string name="menu_cleanable_cache">Menu Cleanable Cache</string>
-    <string name="storage_explanation">Total usage uses Android system storage statistics when available; a local no-follow scan is only a fallback. Cleanup only includes temporary uploads, image crops, camera previews, AI response disk cache, and old installer packages left after an in-app update. It will not delete PRoot environments, chat history, model settings, API keys, MCP/SSH, Skills, avatars, or workspace files.</string>
+    <string name="storage_explanation">Installed app size includes APK files, extracted libraries and optimized code, so it can exceed the download size. Current APK files and downloaded updates are listed separately. Cleanup removes temporary uploads, image crops, camera previews, AI response cache and downloaded update packages, including pending installers. Updates can be downloaded again. PRoot environments, chat history, model settings, API keys, MCP/SSH, Skills, avatars and workspace files are preserved.</string>
     <string name="label_file_count_size">File Count Size %1$d</string>
     <string name="action_clean">Clean</string>
     <string name="status_cleaning">Cleaning %1$s</string>

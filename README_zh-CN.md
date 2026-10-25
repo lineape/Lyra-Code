@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-4.1.3-blue" />
+  <img alt="Version" src="https://img.shields.io/badge/version-4.2.0-blue" />
   <img alt="Android" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white" />
   <a href="https://github.com/termux/proot"><img alt="PRoot Linux" src="https://img.shields.io/badge/PRoot-Linux-FCC624?logo=linux&logoColor=black" /></a>
   <a href="https://github.com/termux/termux-app"><img alt="Termux" src="https://img.shields.io/badge/Termux-integrated-000000" /></a>
@@ -98,6 +98,8 @@ mkdir -p ~/.termux && (grep -qxF 'allow-external-apps=true' ~/.termux/termux.pro
 ```
 
 APK 会生成到 `app/build/outputs/apk/debug/`。Release 签名应仅在本地配置，请勿提交签名密钥、keystore、API Key、`.env`、`local.properties` 或其他隐私文件。
+
+默认仅生成通用 APK；release 开启 R8 和资源裁剪。后续可通过 `-Plyra.abiSplits=true` 重新启用按架构分包。构建参数、体积分析和发布兼容说明见[安装包体积优化](docs/APK_SIZE.md)。
 
 ## 安全说明
 

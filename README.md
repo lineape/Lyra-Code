@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-4.1.3-blue" />
+  <img alt="Version" src="https://img.shields.io/badge/version-4.2.0-blue" />
   <img alt="Android" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white" />
   <a href="https://github.com/termux/proot"><img alt="PRoot Linux" src="https://img.shields.io/badge/PRoot-Linux-FCC624?logo=linux&logoColor=black" /></a>
   <a href="https://github.com/termux/termux-app"><img alt="Termux" src="https://img.shields.io/badge/Termux-integrated-000000" /></a>
@@ -100,6 +100,8 @@ Requirements: JDK 17, Android SDK 37, and Android Studio or a command-line Andro
 ```
 
 The APK is generated under `app/build/outputs/apk/debug/`. Configure release signing locally, and never commit signing keys, keystores, API keys, `.env`, `local.properties`, or other private files.
+
+Builds generate one universal APK by default; release builds enable R8 and resource shrinking. Per-ABI builds remain available with `-Plyra.abiSplits=true`. See [APK size optimization](docs/APK_SIZE.md) for build switches, size analysis, and update compatibility.
 
 ## Security
 

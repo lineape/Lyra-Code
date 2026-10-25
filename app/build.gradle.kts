@@ -1,9 +1,44 @@
 import java.security.MessageDigest
+import groovy.json.JsonGenerator
+import groovy.json.JsonSlurper
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+@CacheableTask
+abstract class GenerateTokenizerAssets : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val tokenizerFile: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val tokenizer = JsonSlurper().parse(tokenizerFile.get().asFile) as Map<*, *>
+        val model = tokenizer["model"] as Map<*, *>
+        val vocabulary = model["vocab"] as Map<*, *>
+        check(vocabulary.isNotEmpty()) { "The bundled tokenizer vocabulary is empty" }
+        // DeepSeekV3Tokenizer reads only model.vocab. Keep the complete upstream file in
+        // the repository, but omit unused merges, metadata and Python files from the APK.
+        val output = outputDirectory.file("tokenizer.json").get().asFile
+        output.parentFile.mkdirs()
+        val json = JsonGenerator.Options().disableUnicodeEscaping().build()
+        output.writeText(json.toJson(mapOf("model" to mapOf("vocab" to vocabulary))), Charsets.UTF_8)
+    }
+}
+
+val generateTokenizerAssets by tasks.registering(GenerateTokenizerAssets::class) {
+    tokenizerFile.set(rootProject.layout.projectDirectory.file("deepseek_v3_tokenizer/deepseek_v3_tokenizer/tokenizer.json"))
+    outputDirectory.set(layout.buildDirectory.dir("generated/tokenizerAssets"))
+}
+
+// Ship one universal APK for now; per-ABI outputs remain available on demand.
+val enableAbiSplits = providers.gradleProperty("lyra.abiSplits").orNull?.toBooleanStrict() ?: false
+val packagedAbis = listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
 
 val bundledProotRuntimeDir = layout.projectDirectory.dir("src/debianRuntime/jniLibs")
 val bundledProotRuntimeHashes = mapOf(
@@ -21,8 +56,14 @@ android {
         applicationId = "com.yukisoffd.lyracode"
         minSdk = 26
         targetSdk = 37
-        versionCode = 88
-        versionName = "4.1.3"
+        versionCode = 89
+        versionName = "4.2.0"
+
+        if (!enableAbiSplits) {
+            ndk {
+                abiFilters += packagedAbis
+            }
+        }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField(
@@ -55,12 +96,21 @@ android {
             matchingFallbacks += listOf("debug")
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+    }
+    splits {
+        abi {
+            isEnable = enableAbiSplits
+            reset()
+            include(*packagedAbis.toTypedArray())
+            isUniversalApk = providers.gradleProperty("lyra.universalApk").orNull?.toBooleanStrict() ?:true
         }
     }
     compileOptions {
@@ -82,16 +132,27 @@ android {
         resources {
             merges += "META-INF/LICENSE.md"
             merges += "META-INF/NOTICE.md"
+            // The JavaMail and activation providers share these service registries.
+            merges += "META-INF/javamail.*"
+            merges += "META-INF/mailcap"
         }
         jniLibs.useLegacyPackaging = true
     }
     sourceSets {
         getByName("main") {
-            assets.directories.add(rootProject.file("deepseek_v3_tokenizer/deepseek_v3_tokenizer").absolutePath)
             kotlin.directories.add("src/debianRuntime/java")
             res.directories.add("src/debianRuntime/res")
             jniLibs.directories.add("src/debianRuntime/jniLibs")
         }
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(
+            generateTokenizerAssets,
+            GenerateTokenizerAssets::outputDirectory,
+        )
     }
 }
 

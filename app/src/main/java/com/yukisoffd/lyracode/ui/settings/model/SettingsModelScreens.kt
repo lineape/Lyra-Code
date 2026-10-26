@@ -706,6 +706,7 @@ internal fun ModelServiceSettings(
     var enabledModels by remember(editKey) { mutableStateOf(current?.enabledModels.orEmpty().toSet()) }
     var showEnabledModelsDialog by remember(editKey) { mutableStateOf(false) }
     var useResponsesApi by remember(editKey) { mutableStateOf(current?.usesResponsesApi == true) }
+    var gzipRequestBodies by remember(editKey) { mutableStateOf(current?.gzipRequestBodies ?: true) }
     var advancedExpanded by remember(editKey) { mutableStateOf(draftNewProfile == null || draftPresetId == null) }
     var selectedReachabilityModels by remember(editKey) { mutableStateOf<Set<String>>(emptySet()) }
     var providerReachabilityResult by remember(editKey) { mutableStateOf<ProviderReachabilityResult?>(null) }
@@ -768,6 +769,7 @@ internal fun ModelServiceSettings(
             savedModels = models.filter { it.isNotBlank() }.distinct(),
             enabledModels = enabled,
             useResponsesApi = apiFormat == ApiProfile.API_FORMAT_OPENAI && useResponsesApi,
+            gzipRequestBodies = gzipRequestBodies,
             modelRequestOverrides = requestOverrides,
         )
     }
@@ -1143,6 +1145,23 @@ internal fun ModelServiceSettings(
                                     onCheckedChange = { useResponsesApi = it },
                                 )
                             }
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Text(
+                                    uiText(R.string.gzip_request_bodies_enabled),
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                Switch(checked = gzipRequestBodies, onCheckedChange = { gzipRequestBodies = it })
+                            }
+                            Text(
+                                uiText(R.string.gzip_request_bodies_hint),
+                                color = KimiMuted,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
                             OutlinedTextField(value = baseUrl, onValueChange = { baseUrl = it }, modifier = Modifier.fillMaxWidth(), label = { Text(uiText(R.string.label_base_url)) }, singleLine = true)
                             OutlinedTextField(
                                 value = chatPath,

@@ -2,6 +2,7 @@ package com.yukisoffd.lyracode.ai
 
 import com.yukisoffd.lyracode.data.ConversationStore
 import com.yukisoffd.lyracode.data.SubAgentTaskRecord
+import com.yukisoffd.lyracode.workspace.TextBackupStore
 
 /**
  * Decides what a `run_sub_agents` call does when its parent conversation has an undelivered
@@ -100,12 +101,21 @@ internal object SubAgentResume {
                 task.readOnly -> Action.Run
                 else -> Action.InterruptedWrite(
                     writePaths = row.writePaths,
-                    backupPaths = row.writePaths.map { "$it.bak" }.filter { it in backupPaths },
+                    backupPaths = backupPathsFor(row.writePaths, backupPaths),
                 )
             }
         }
         return Plan(batchId, actions)
     }
+
+    /**
+     * The copies that exist for a write path: the never-replaced copy an interrupted write keeps
+     * first, then the ordinary `.bak`, which every later write replaces.
+     */
+    internal fun backupPathsFor(writePaths: List<String>, existing: Set<String>): List<String> =
+        writePaths.flatMap { path ->
+            listOf(TextBackupStore.interruptedBackupPath(path), TextBackupStore.backupPath(path))
+        }.filter { it in existing }
 
     /**
      * Every field the child's prompt is built from: the same text with a different read-only

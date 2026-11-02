@@ -100,6 +100,27 @@ class SubAgentResumeTest {
     }
 
     @Test
+    fun `an interrupted write reports the never-replaced copy before the ordinary backup`() {
+        val stored = listOf(
+            row(0, "edit", writePaths = listOf("src/A.kt"), child = 204, status = SubAgentTaskStatus.RUNNING),
+        )
+
+        val plan = SubAgentResume.plan(
+            batchId = "batch-6",
+            storedUserMessageId = 1,
+            currentUserMessageId = 1,
+            stored = stored,
+            requested = requested("edit" to false, writePaths = listOf("src/A.kt")),
+            // Both exist: a later write replaced the ordinary backup, while the preserved copy
+            // still holds the state from before the interrupted write.
+            backupPaths = setOf("src/A.kt.bak", "src/A.kt.interrupted.bak"),
+        )!!
+
+        val interrupted = plan.actions[0] as SubAgentResume.Action.InterruptedWrite
+        assertEquals(listOf("src/A.kt.interrupted.bak", "src/A.kt.bak"), interrupted.backupPaths)
+    }
+
+    @Test
     fun `a write task that never started is safe to run`() {
         val stored = listOf(row(0, "edit", writePaths = listOf("src/A.kt"), status = SubAgentTaskStatus.PENDING))
 

@@ -18,6 +18,14 @@ class NativeFileManager(
     private val context: Context,
     private val workspaceManager: WorkspaceManager,
 ) {
+    /** The `.bak` policy: every write replaces the backup, interrupted writes keep a copy. */
+    private val textBackups = TextBackupStore(
+        exists = { path -> resolve(path)?.isFile == true },
+        copy = ::copyTextFile,
+        remove = { path -> resolve(path)?.delete() == true },
+        rename = { path, newName -> resolve(path)?.renameTo(newName) == true },
+    )
+
     fun hasWorkspaceRoot(): Boolean = workspaceManager.rootUri() != null
 
     fun listDirectory(path: String = ""): Result<List<WorkspaceFile>> = runCatching {
@@ -197,19 +205,41 @@ class NativeFileManager(
     }
 
     private fun backupExistingTextFile(path: String) {
-        if (path.endsWith(".bak", ignoreCase = true)) return
-        val source = resolve(path)?.takeIf { it.isFile } ?: return
-        val backupPath = "${normalize(path)}.bak"
-        // Never replace an existing backup. After an interrupted write the target may already be
-        // truncated, and a later write would copy that truncated file over the only good copy.
-        // Keeping the first backup also makes it the state before the task, not the last write.
-        if (resolve(backupPath)?.isFile == true) return
-        val backup = findOrCreateFile(backupPath)
-        context.contentResolver.openInputStream(source.uri)?.buffered()?.use { input ->
-            context.contentResolver.openOutputStream(backup.uri, "wt")?.buffered()?.use { output ->
+        textBackups.replaceBackup(normalize(path))
+    }
+
+    /**
+     * Keeps one copy of each interrupted write's backup under a name that no later write
+     * replaces, and returns the copies that exist now so a report can list them. Called at
+     * controller start and when a sub-agent plan is built, before any later write can replace
+     * the backup a started write left behind.
+     */
+    fun preserveInterruptedBackups(paths: Collection<String>): List<String> {
+        val clean = cleanWorkspacePaths(paths)
+        clean.forEach { path -> runCatching { textBackups.preserveInterrupted(path) } }
+        return existingInterruptedBackups(clean)
+    }
+
+    /** The `<path>.interrupted.bak` copies that exist right now, in the order of [paths]. */
+    fun existingInterruptedBackups(paths: Collection<String>): List<String> =
+        cleanWorkspacePaths(paths)
+            .map { TextBackupStore.interruptedBackupPath(it) }
+            .filter { exists(it) }
+
+    private fun cleanWorkspacePaths(paths: Collection<String>): List<String> =
+        paths.mapNotNull { raw -> runCatching { normalize(raw) }.getOrNull() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+    /** Copies one workspace text file over another, replacing the target. */
+    private fun copyTextFile(source: String, target: String) {
+        val sourceFile = resolve(source) ?: throw FileNotFoundException("无法读取原文件以生成备份: $source")
+        val targetFile = findOrCreateFile(target)
+        context.contentResolver.openInputStream(sourceFile.uri)?.buffered()?.use { input ->
+            context.contentResolver.openOutputStream(targetFile.uri, "wt")?.buffered()?.use { output ->
                 input.copyTo(output)
-            } ?: throw FileNotFoundException("无法写入备份: $path.bak")
-        } ?: throw FileNotFoundException("无法读取原文件以生成备份: $path")
+            } ?: throw FileNotFoundException("无法写入备份: $target")
+        } ?: throw FileNotFoundException("无法读取原文件以生成备份: $source")
     }
 
     private fun findOrCreateDirectory(path: String): DocumentFile {

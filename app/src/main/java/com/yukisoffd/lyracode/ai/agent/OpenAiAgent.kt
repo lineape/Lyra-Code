@@ -23,6 +23,7 @@ import com.yukisoffd.lyracode.data.McpToolDefinition
 import com.yukisoffd.lyracode.data.MediaGenerationKind
 import com.yukisoffd.lyracode.data.OpenSubAgentBatch
 import com.yukisoffd.lyracode.data.SubAgentConfig
+import com.yukisoffd.lyracode.data.SubAgentTaskRecord
 import com.yukisoffd.lyracode.data.SubAgentTaskSeed
 import com.yukisoffd.lyracode.data.SubAgentTaskStatus
 import com.yukisoffd.lyracode.debian.ProotCommandExecutor
@@ -41,6 +42,7 @@ import com.yukisoffd.lyracode.uiText
 import com.yukisoffd.lyracode.webdav.WebDavClient
 import com.yukisoffd.lyracode.workspace.GlobalFileManager
 import com.yukisoffd.lyracode.workspace.NativeFileManager
+import com.yukisoffd.lyracode.workspace.TextBackupStore
 import com.yukisoffd.lyracode.workspace.WorkspaceManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -187,6 +189,14 @@ class OpenAiAgent(
      * so a kill in between resumes the batch instead of re-running its writes.
      */
     private val pendingSubAgentBatchCloses = ConcurrentHashMap<Long, String>()
+    /**
+     * Started write rows the store closed when the user edited or regenerated the turn, by
+     * parent conversation. The next `run_sub_agents` call reports them: the edit itself cannot
+     * reach the model, and the new batch would otherwise write blind.
+     */
+    private val closedInterruptedWrites = ConcurrentHashMap<Long, List<SubAgentTaskRecord>>()
+    /** Batches whose abandoned-write overlap was already returned as an error this turn. */
+    private val abandonOverlapReported = ConcurrentHashMap.newKeySet<String>()
     private val subAgentWriteCoordinator = SubAgentWriteCoordinator()
     private val emailClient = EmailClient(context)
     private val fileTools = AgentFileToolHandler(
@@ -712,15 +722,21 @@ class OpenAiAgent(
                     }
                     if (pendingToolId != null) {
                         conversationStore.updateMessage(pendingToolId, content = toolResult)
-                        onUpdate(ChatUpdate("", "", uiText(R.string.ui_tool_complete) + call.name, forceReload = true))
                     } else {
                         conversationStore.addMessage(
                             conversationId, "tool", toolResult.take(MAX_TOOL_RESULT_CHARS),
                             profileId = profile.id, model = model, toolCallId = call.id,
                         )
+                    }
+                    // Close the batch as soon as its result row is stored. The UI update below
+                    // suspends and can be cancelled, which must not leave a delivered batch open
+                    // for the next run to report as abandoned.
+                    flushDeliveredSubAgentBatch(conversationId, call.name)
+                    if (pendingToolId != null) {
+                        onUpdate(ChatUpdate("", "", uiText(R.string.ui_tool_complete) + call.name, forceReload = true))
+                    } else {
                         onUpdate(ChatUpdate(result.content, result.thinking, uiText(R.string.ui_tool_complete) + call.name, assistantId))
                     }
-                    flushDeliveredSubAgentBatch(conversationId, call.name)
                 }
             }
         } catch (error: CancellationException) {
@@ -2561,7 +2577,54 @@ class OpenAiAgent(
         }
     }
 
+    /**
+     * Remembers the started write rows an edit or Regenerate closed, so the next
+     * `run_sub_agents` call can report them to the model before it writes those paths again.
+     */
+    fun noteClosedInterruptedWrites(conversationId: Long, rows: List<SubAgentTaskRecord>) {
+        if (rows.isEmpty()) return
+        closedInterruptedWrites[conversationId] = rows
+    }
+
+    /** Keeps each interrupted write's backup under a name that no later write replaces. */
+    fun preserveInterruptedBackups(paths: Collection<String>) {
+        if (paths.isEmpty()) return
+        nativeFileManager.preserveInterruptedBackups(paths)
+    }
+
+    /**
+     * Covers a process restart: every started write of an open batch keeps its backup before a
+     * later write can replace it. Call from the controller's start, off the main thread.
+     */
+    fun preserveOpenBatchBackups() {
+        preserveInterruptedBackups(conversationStore.openSubAgentWritePaths())
+    }
+
+    /** Started write rows of the replaced batch whose paths this batch writes again. */
+    private fun overlappingStartedWrites(
+        rows: List<SubAgentTaskRecord>,
+        requestedPaths: List<String>,
+    ): List<Pair<SubAgentTaskRecord, List<String>>> = rows.mapNotNull { row ->
+        val overlap = row.writePaths.filter { stored ->
+            requestedPaths.any { requested -> subAgentWriteCoordinator.pathsConflict(stored, requested) }
+        }
+        overlap.takeIf { it.isNotEmpty() }?.let { row to it }
+    }
+
+    private fun abandonOverlapMessage(overlaps: List<Pair<SubAgentTaskRecord, List<String>>>): String =
+        buildString {
+            append("ABANDONED_WRITE_OVERLAP: this batch writes paths an interrupted task from the replaced batch may have changed: ")
+            append(overlaps.joinToString("; ") { (row, paths) -> "task ${row.index + 1} (${paths.joinToString(", ")})" })
+            append(
+                ". Nothing ran. Inspect each path and its backup copy first, then call run_sub_agents again " +
+                    "to abandon the old batch and run this one.",
+            )
+        }
+
     private suspend fun runSubAgents(parentConversationId: Long, args: JSONObject, onStatus: suspend (String) -> Unit = {}): String {
+        // A pending close left behind by an attempt whose tool row never landed is stale: this
+        // call owns the conversation's batch now, and must not close that older batch instead.
+        pendingSubAgentBatchCloses.remove(parentConversationId)
         require(!isSubAgentConversation(parentConversationId)) { "SUB_AGENT_RECURSION_BLOCKED: A sub-agent cannot delegate more sub-agents." }
         if (!settings.subAgentOrchestrationEnabled) return "ERROR: SUB_AGENT_DISABLED\nSub-agent orchestration is disabled by the user."
         val candidates = settings.enabledSubAgents()
@@ -2598,14 +2661,29 @@ class OpenAiAgent(
         val openBatch = conversationStore.openSubAgentBatch(parentConversationId)
         val plan = openBatch?.let { buildSubAgentResumePlan(it, requested, userMessageId) }
         val batchId = plan?.batchId ?: UUID.randomUUID().toString()
+        // A write task that started in a batch this call replaces, or that an edit closed, may
+        // have changed files. Its `.bak` is the only copy from before that write, and every later
+        // write replaces it, so copy it to the never-replaced name before anything else runs.
+        val startedWriteRows = openBatch?.tasks.orEmpty()
+            .filter { it.childConversationId > 0 && it.writePaths.isNotEmpty() }
+        val closedWriteRows = closedInterruptedWrites[parentConversationId].orEmpty()
+        nativeFileManager.preserveInterruptedBackups(
+            (startedWriteRows + closedWriteRows).flatMap { it.writePaths },
+        )
         // A reworded batch abandons the open one. Read tasks may safely run again, but a write
-        // task that had started may have changed files, so its facts go into this result.
-        val abandonedWriteTasks = if (plan == null) {
-            openBatch?.tasks.orEmpty().filter { it.childConversationId > 0 && it.writePaths.isNotEmpty() }
-        } else {
-            emptyList()
+        // task that had started may have changed files: refuse this call once and name the paths,
+        // so the model inspects them before the abandoning call runs the new children.
+        val abandonedWriteTasks = if (plan == null) startedWriteRows + closedWriteRows else emptyList()
+        if (plan == null && abandonedWriteTasks.isNotEmpty()) {
+            val overlaps = overlappingStartedWrites(abandonedWriteTasks, normalizedWritePaths.flatten())
+            if (overlaps.isNotEmpty() && abandonOverlapReported.add(openBatch?.batchId.orEmpty())) {
+                error(abandonOverlapMessage(overlaps))
+            }
         }
         if (plan == null) {
+            abandonOverlapReported.remove(openBatch?.batchId.orEmpty())
+            // The report below carries these facts; a second report would be stale.
+            closedInterruptedWrites.remove(parentConversationId)
             openBatch?.let { conversationStore.markSubAgentBatchDelivered(parentConversationId, it.batchId) }
             conversationStore.beginSubAgentBatch(
                 parentConversationId,
@@ -2688,10 +2766,11 @@ class OpenAiAgent(
                         "This batch resumed after an interruption. Tasks in reused_task_indexes returned their " +
                             "stored results and were not run again. Tasks in interrupted_task_indexes were NOT " +
                             "re-run because they may have changed files; check each write path and its backup " +
-                            "before continuing. Only write_file, edit_file and append_file make a .bak, and only " +
-                            "the first write of a path makes one: a .bak can predate this task or this batch, and " +
-                            "an empty backup_paths list proves nothing. delete_file_or_folder, rename_move and " +
-                            "create_folder make no backup.",
+                            "before continuing. Every write replaces a path's .bak, so a .bak only proves the " +
+                            "state before the latest write and can predate this task. A path whose write was " +
+                            "interrupted keeps a copy that later writes never replace at " +
+                            "<path>.interrupted.bak. An empty backup_paths list proves nothing, and " +
+                            "delete_file_or_folder, rename_move and create_folder make no backup.",
                     )
             }
             if (abandonedWriteTasks.isNotEmpty()) {
@@ -2706,17 +2785,23 @@ class OpenAiAgent(
                                         .put("task", row.taskText)
                                         .put("write_paths", JSONArray(row.writePaths))
                                         .put("backup_paths", JSONArray(existingBackups(row.writePaths)))
-                                        .put("status", "interrupted"),
+                                        .put(
+                                            "status",
+                                            if (row.status == SubAgentTaskStatus.COMPLETED) "completed" else "interrupted",
+                                        ),
                                 )
                             }
                         },
                     )
                     .put(
                         "abandoned_write_note",
-                        "These write tasks started in an earlier batch that never finished and that this new " +
-                            "batch replaces. They were NOT re-run because they may have changed files. Inspect " +
-                            "each write path and its .bak before writing it again. An existing .bak is preserved " +
-                            "on later writes, so it may be the only copy from before the interruption.",
+                        "These write tasks started in an earlier batch that this call replaced, or that an edit " +
+                            "or Regenerate closed. They were NOT re-run because they may have changed files. " +
+                            "Inspect each write path before writing it again. A task whose status is completed " +
+                            "returned its write before the batch was abandoned; a task whose status is " +
+                            "interrupted may have stopped anywhere inside its write. Every write replaces a " +
+                            "path's .bak, so read <path>.interrupted.bak when it is listed: later writes never " +
+                            "replace that copy.",
                     )
             }
             // The batch stays open until the tool result row is in the parent's store; see
@@ -2747,7 +2832,11 @@ class OpenAiAgent(
             row.childConversationId.takeIf { it > 0 && childProducedResult(it) }
         }.toSet()
         val backupPaths = batch.tasks
-            .flatMap { row -> row.writePaths.map { "$it.bak" } }
+            .flatMap { row ->
+                row.writePaths.flatMap { path ->
+                    listOf(TextBackupStore.backupPath(path), TextBackupStore.interruptedBackupPath(path))
+                }
+            }
             .filter { nativeFileManager.exists(it) }
             .toSet()
         return SubAgentResume.plan(
@@ -2810,15 +2899,20 @@ class OpenAiAgent(
                 "error",
                 "This write task was interrupted: the app died or the run was stopped before it finished. " +
                     "It was not re-run because it may have changed files. Inspect every write path and its " +
-                    ".bak copy before deciding what to do. Only write_file, edit_file and append_file make a " +
-                    ".bak, and only the first write of a path makes one; a .bak may predate this task, and an " +
-                    "empty backup_paths list proves nothing. Later writes preserve an existing .bak.",
+                    "backup copy before deciding what to do. Every write replaces a path's .bak, so a .bak " +
+                    "only proves the state before the latest write. A path whose write was interrupted keeps " +
+                    "a copy that later writes never replace at <path>.interrupted.bak. An empty " +
+                    "backup_paths list proves nothing.",
             )
     }
 
-    /** Backups that exist right now: files with that name, not proof this task made them. */
+    /** The backups that exist right now: interrupted-write copies first, then the ordinary `.bak`. */
     private fun existingBackups(writePaths: List<String>): List<String> =
-        writePaths.map { "$it.bak" }.filter { nativeFileManager.exists(it) }
+        writePaths
+            .flatMap { path ->
+                listOf(TextBackupStore.interruptedBackupPath(path), TextBackupStore.backupPath(path))
+            }
+            .filter { nativeFileManager.exists(it) }
 
     /**
      * Closes the batch whose result was just written to the parent conversation. Called after

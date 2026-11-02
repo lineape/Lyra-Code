@@ -398,6 +398,8 @@ class ChatController(
     // cancel them and a cancelled controller scope can never leak the service or the wake lock.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val stopRunsToken = Any()
+    /** True after [close]; a job created then is already cancelled and must not start a service. */
+    private var closed = false
 
     init {
         AgentRunForegroundService.bindStopRuns(stopRunsToken) { stopAllActiveRuns() }
@@ -577,6 +579,7 @@ class ChatController(
         AgentRunForegroundService.unbindStopRuns(stopRunsToken)
         // This scope belongs to this controller: a recreate builds a new controller with a new
         // scope, so cancelling here stops this controller's runs and nothing else.
+        closed = true
         scope.cancel()
     }
 
@@ -2074,6 +2077,9 @@ class ChatController(
         jobs[conversationId] = launchedJob
         jobOutcomes[conversationId] = onOutcome
         conversationOperations[conversationId] = operation
+        // Paired with [AgentRunForegroundService.start]: a completion that runs before the start
+        // (a job cancelled before its first dispatch) must not decrement the process run count.
+        var servedRun = false
         // Completion, not the body's finally: a LAZY job cancelled before its first dispatch
         // never enters the body, and its outcome and service stop would be lost with it.
         launchedJob.invokeOnCompletion { cause ->
@@ -2088,12 +2094,18 @@ class ChatController(
                 val status = runCatching { conversationStore.conversation(conversationId)?.status }.getOrNull()
                 runCatching { outcomeCallback?.invoke(classifyRunOutcome(cause, status)) }
             }
-            // The foreground service is only a lifetime signal: drop it when the last
-            // conversation job finishes, so no notification outlives the work.
-            if (jobs.isEmpty()) AgentRunForegroundService.stop(appContext)
+            // The foreground service is only a lifetime signal. The service counts runs across
+            // the whole process, because a recreated controller can own a newer run than this
+            // one; only the last run to end may drop the notification.
+            if (servedRun) AgentRunForegroundService.finish(appContext)
         }
-        AgentRunForegroundService.start(appContext)
-        launchedJob.start()
+        // A closed controller's job is already cancelled when it is created, so its completion
+        // has run and the start below would leave a service nothing ever stops.
+        if (launchedJob.isActive && !closed) {
+            servedRun = true
+            AgentRunForegroundService.start(appContext)
+            launchedJob.start()
+        }
         return launchedJob
     }
 
@@ -2203,6 +2215,9 @@ class ChatController(
     }
 
     private fun applyChatUpdate(update: ChatUpdate) {
+        // Every agent update is progress. Re-arm the wake lock so a long run does not lose it
+        // silently 30 minutes in; the service throttles the actual acquire.
+        AgentRunForegroundService.renewWakeLock()
         if (update.forceReload) {
             reloadMessages()
             return

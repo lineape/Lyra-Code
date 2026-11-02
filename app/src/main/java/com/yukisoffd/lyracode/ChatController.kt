@@ -14,6 +14,7 @@ import com.yukisoffd.lyracode.ai.ChatUpdate
 import com.yukisoffd.lyracode.ai.AgentFileMutation
 import com.yukisoffd.lyracode.ai.AgentFileActivity
 import com.yukisoffd.lyracode.ai.AgentFileEditResult
+import com.yukisoffd.lyracode.ai.AgentRunForegroundService
 import com.yukisoffd.lyracode.ai.OpenAiAgent
 import com.yukisoffd.lyracode.ai.ModelReachabilityResult
 import com.yukisoffd.lyracode.ai.ProviderReachabilityReport
@@ -392,7 +393,14 @@ class ChatController(
         COMPRESSING,
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    // The run scope lives with the foreground service's companion, so the process is raised
+    // to foreground priority for as long as any conversation job runs.
+    private val scope = AgentRunForegroundService.runScope
+
+    init {
+        AgentRunForegroundService.stopRuns = { stopAllActiveRuns() }
+    }
+
     private val deviceConversationUpdateListener: (Long, ChatUpdate) -> Unit = { conversationId, update ->
         scope.launch {
             if (update.forceReload || update.messageId <= 0L) reloadConversations()
@@ -1682,6 +1690,11 @@ class ChatController(
         }
     }
 
+    /** Stops every conversation run; the run notification's stop action calls this. */
+    internal fun stopAllActiveRuns() {
+        jobs.keys.toList().forEach { conversationId -> jobs[conversationId]?.cancel() }
+    }
+
     fun stopActive() {
         val conversationId = activeConversationId.value.takeIf { it > 0 } ?: return
         // A scoped device task owns the conversation outside the controller's job registry;
@@ -2038,11 +2051,15 @@ class ChatController(
                     val outcome = classifyRunOutcome(failure, status)
                     runCatching { outcomeCallback?.invoke(outcome) }
                 }
+                // The foreground service is only a lifetime signal: drop it when the last
+                // conversation job finishes, so no notification outlives the work.
+                if (jobs.isEmpty()) AgentRunForegroundService.stop(appContext)
             }
         }
         jobs[conversationId] = launchedJob
         jobOutcomes[conversationId] = onOutcome
         conversationOperations[conversationId] = operation
+        AgentRunForegroundService.start(appContext)
         launchedJob.start()
         return launchedJob
     }

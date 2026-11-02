@@ -5,16 +5,24 @@ data class SubAgentTaskSeed(
     val index: Int,
     val taskText: String,
     val writePaths: List<String>,
+    val readOnly: Boolean,
+    val expectedOutput: String,
+    val capabilityHint: String,
 )
 
 /**
  * One persisted row of an open batch. The row is written before the child starts and updated
- * as the child progresses, so a process death leaves a record of every task's state.
+ * as the child progresses, so a process death leaves a record of every task's state. Every
+ * field of the requested task is stored so a resume can prove the model asked for the same
+ * work, not a task that merely shares its text.
  */
 data class SubAgentTaskRecord(
     val index: Int,
     val taskText: String,
     val writePaths: List<String>,
+    val readOnly: Boolean,
+    val expectedOutput: String,
+    val capabilityHint: String,
     val childConversationId: Long,
     val status: String,
 )
@@ -39,6 +47,8 @@ object SubAgentTaskStatus {
 /** The newest batch that never delivered a result to its parent conversation. */
 data class OpenSubAgentBatch(
     val batchId: String,
+    /** The parent's last user message when the batch began; a resume must match it. */
+    val userMessageId: Long,
     val tasks: List<SubAgentTaskRecord>,
 )
 
@@ -48,7 +58,7 @@ data class OpenSubAgentBatch(
  * a device only: the repo has no Robolectric, and Android's SQLite is unavailable on the JVM.
  */
 internal object SubAgentTaskSchema {
-    const val DATABASE_VERSION = 13
+    const val DATABASE_VERSION = 14
 
     const val CREATE_TABLE = """
         CREATE TABLE IF NOT EXISTS sub_agent_tasks (
@@ -58,6 +68,10 @@ internal object SubAgentTaskSchema {
             child_conversation_id INTEGER NOT NULL DEFAULT 0,
             task_text TEXT NOT NULL,
             write_paths TEXT NOT NULL DEFAULT '[]',
+            read_only INTEGER NOT NULL DEFAULT 0,
+            expected_output TEXT NOT NULL DEFAULT '',
+            capability_hint TEXT NOT NULL DEFAULT '',
+            user_message_id INTEGER NOT NULL DEFAULT 0,
             status TEXT NOT NULL,
             delivered INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL,
@@ -68,4 +82,12 @@ internal object SubAgentTaskSchema {
 
     const val CREATE_INDEX =
         "CREATE INDEX IF NOT EXISTS idx_sub_agent_tasks_open ON sub_agent_tasks(parent_conversation_id, delivered)"
+
+    /** Carries the version-13 table to the identity columns the resume match needs. */
+    val UPGRADE_13_TO_14 = listOf(
+        "ALTER TABLE sub_agent_tasks ADD COLUMN read_only INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE sub_agent_tasks ADD COLUMN expected_output TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE sub_agent_tasks ADD COLUMN capability_hint TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE sub_agent_tasks ADD COLUMN user_message_id INTEGER NOT NULL DEFAULT 0",
+    )
 }

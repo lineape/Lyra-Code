@@ -17,6 +17,9 @@ internal object SubAgentResume {
         val index: Int,
         val text: String,
         val readOnly: Boolean,
+        val writePaths: List<String> = emptyList(),
+        val expectedOutput: String = "",
+        val capabilityHint: String = "",
     )
 
     sealed interface Action {
@@ -60,7 +63,13 @@ internal object SubAgentResume {
 
     /**
      * Returns null when the stored batch is not the batch the model just asked for: a different
-     * task count or different task text at any index. A null plan starts a fresh batch.
+     * task count, a different user message, or any task field that differs at an index. A null
+     * plan starts a fresh batch.
+     *
+     * [storedUserMessageId] is the parent's last user message when the batch began and
+     * [currentUserMessageId] is the parent's last user message now. A new message changes the
+     * id, so an old batch can never answer a later turn; editing or regenerating deletes the
+     * turn's messages and the store closes the batch outright.
      *
      * [reusableChildIds] are child conversations that [childFinished] proved finished even
      * though their row never recorded completion, which is exactly the "finished child whose
@@ -70,15 +79,18 @@ internal object SubAgentResume {
      */
     fun plan(
         batchId: String,
+        storedUserMessageId: Long,
+        currentUserMessageId: Long,
         stored: List<SubAgentTaskRecord>,
         requested: List<RequestedTask>,
         reusableChildIds: Set<Long> = emptySet(),
         backupPaths: Set<String> = emptySet(),
     ): Plan? {
+        if (storedUserMessageId != currentUserMessageId) return null
         val ordered = stored.sortedBy { it.index }
         if (ordered.size != requested.size) return null
         if (requested.map { it.index } != ordered.indices.toList()) return null
-        if (ordered.indices.any { ordered[it].taskText.trim() != requested[it].text.trim() }) return null
+        if (ordered.indices.any { !sameTask(ordered[it], requested[it]) }) return null
         val actions = requested.associate { task ->
             val row = ordered[task.index]
             task.index to when {
@@ -94,4 +106,17 @@ internal object SubAgentResume {
         }
         return Plan(batchId, actions)
     }
+
+    /**
+     * Every field the child's prompt is built from: the same text with a different read-only
+     * flag, write paths, expected output or capability hint is a different task.
+     */
+    private fun sameTask(row: SubAgentTaskRecord, request: RequestedTask): Boolean =
+        row.taskText.trim() == request.text.trim() &&
+            row.readOnly == request.readOnly &&
+            row.writePaths.map(::normalizePath).sorted() == request.writePaths.map(::normalizePath).sorted() &&
+            row.expectedOutput.trim() == request.expectedOutput.trim() &&
+            row.capabilityHint.trim() == request.capabilityHint.trim()
+
+    private fun normalizePath(path: String): String = path.trim().trimStart('/')
 }

@@ -21,6 +21,8 @@ class SubAgentResumeTest {
 
         val plan = SubAgentResume.plan(
             batchId = "batch-1",
+            storedUserMessageId = 1,
+            currentUserMessageId = 1,
             stored = stored,
             requested = requested("a" to true, "b" to true, "c" to true, "d" to true, "e" to true, "f" to true),
             reusableChildIds = setOf(101, 102, 103),
@@ -38,6 +40,8 @@ class SubAgentResumeTest {
 
         val plan = SubAgentResume.plan(
             batchId = "batch-2",
+            storedUserMessageId = 1,
+            currentUserMessageId = 1,
             stored = stored,
             requested = requested("research" to true),
             reusableChildIds = setOf(300),
@@ -56,8 +60,13 @@ class SubAgentResumeTest {
 
         val plan = SubAgentResume.plan(
             batchId = "batch-3",
+            storedUserMessageId = 1,
+            currentUserMessageId = 1,
             stored = stored,
-            requested = requested("edit" to false, "read" to true),
+            requested = listOf(
+                SubAgentResume.RequestedTask(0, "edit", false, listOf("src/A.kt")),
+                SubAgentResume.RequestedTask(1, "read", true),
+            ),
             reusableChildIds = setOf(205),
             backupPaths = setOf("src/A.kt.bak"),
         )!!
@@ -78,8 +87,10 @@ class SubAgentResumeTest {
 
         val plan = SubAgentResume.plan(
             batchId = "batch-4",
+            storedUserMessageId = 1,
+            currentUserMessageId = 1,
             stored = stored,
-            requested = requested("edit" to false),
+            requested = requested("edit" to false, writePaths = listOf("src/A.kt", "src/B.kt")),
             backupPaths = setOf("src/B.kt.bak"),
         )!!
 
@@ -94,8 +105,10 @@ class SubAgentResumeTest {
 
         val plan = SubAgentResume.plan(
             batchId = "batch-5",
+            storedUserMessageId = 1,
+            currentUserMessageId = 1,
             stored = stored,
-            requested = requested("edit" to false),
+            requested = requested("edit" to false, writePaths = listOf("src/A.kt")),
         )!!
 
         assertEquals(SubAgentResume.Action.Run, plan.actions[0])
@@ -109,8 +122,10 @@ class SubAgentResumeTest {
 
         val plan = SubAgentResume.plan(
             batchId = "batch-6",
+            storedUserMessageId = 1,
+            currentUserMessageId = 1,
             stored = stored,
-            requested = requested("edit" to false),
+            requested = requested("edit" to false, writePaths = listOf("src/A.kt")),
             reusableChildIds = setOf(401),
         )!!
 
@@ -125,8 +140,10 @@ class SubAgentResumeTest {
 
         val plan = SubAgentResume.plan(
             batchId = "batch-6b",
+            storedUserMessageId = 1,
+            currentUserMessageId = 1,
             stored = stored,
-            requested = requested("edit" to false),
+            requested = requested("edit" to false, writePaths = listOf("src/A.kt")),
         )!!
 
         assertEquals(SubAgentResume.Action.InterruptedWrite(listOf("src/A.kt"), emptyList()), plan.actions[0])
@@ -140,8 +157,10 @@ class SubAgentResumeTest {
 
         val plan = SubAgentResume.plan(
             batchId = "batch-6c",
+            storedUserMessageId = 1,
+            currentUserMessageId = 1,
             stored = stored,
-            requested = requested("edit" to false),
+            requested = requested("edit" to false, writePaths = listOf("src/A.kt")),
             // The old childProducedResult would have put this id here for idle + assistant.
             reusableChildIds = emptySet(),
             backupPaths = setOf("src/A.kt.bak"),
@@ -196,6 +215,8 @@ class SubAgentResumeTest {
         assertNull(
             SubAgentResume.plan(
                 batchId = "batch-7",
+                storedUserMessageId = 1,
+                currentUserMessageId = 1,
                 stored = stored,
                 requested = requested("new plan" to true),
             ),
@@ -209,26 +230,141 @@ class SubAgentResumeTest {
         assertNull(
             SubAgentResume.plan(
                 batchId = "batch-8",
+                storedUserMessageId = 1,
+                currentUserMessageId = 1,
                 stored = stored,
                 requested = requested("a" to true, "b" to true),
             ),
         )
     }
 
+    @Test
+    fun `a different user message does not resume the stored batch`() {
+        val stored = listOf(row(0, "a", child = 501, status = SubAgentTaskStatus.COMPLETED))
+
+        assertNull(
+            SubAgentResume.plan(
+                batchId = "batch-9",
+                storedUserMessageId = 11,
+                currentUserMessageId = 12,
+                stored = stored,
+                requested = requested("a" to true),
+                reusableChildIds = setOf(501),
+            ),
+        )
+    }
+
+    @Test
+    fun `a different read-only flag does not resume the stored batch`() {
+        assertNull(
+            SubAgentResume.plan(
+                batchId = "batch-10",
+                storedUserMessageId = 1,
+                currentUserMessageId = 1,
+                stored = listOf(row(0, "t", readOnly = true)),
+                requested = requested("t" to false, writePaths = listOf("src/A.kt")),
+            ),
+        )
+    }
+
+    @Test
+    fun `different write paths do not resume the stored batch`() {
+        assertNull(
+            SubAgentResume.plan(
+                batchId = "batch-11",
+                storedUserMessageId = 1,
+                currentUserMessageId = 1,
+                stored = listOf(row(0, "t", readOnly = false, writePaths = listOf("src/A.kt"))),
+                requested = requested("t" to false, writePaths = listOf("src/B.kt")),
+            ),
+        )
+    }
+
+    @Test
+    fun `a different expected output does not resume the stored batch`() {
+        assertNull(
+            SubAgentResume.plan(
+                batchId = "batch-12",
+                storedUserMessageId = 1,
+                currentUserMessageId = 1,
+                stored = listOf(row(0, "t", expectedOutput = "a diff")),
+                requested = requested("t" to true, expectedOutput = "a patch"),
+            ),
+        )
+    }
+
+    @Test
+    fun `a different capability hint does not resume the stored batch`() {
+        assertNull(
+            SubAgentResume.plan(
+                batchId = "batch-13",
+                storedUserMessageId = 1,
+                currentUserMessageId = 1,
+                stored = listOf(row(0, "t", capabilityHint = "frontend")),
+                requested = requested("t" to true, capabilityHint = "backend"),
+            ),
+        )
+    }
+
+    @Test
+    fun `the same task with the same fields resumes`() {
+        val stored = listOf(
+            row(
+                0,
+                "t",
+                readOnly = false,
+                writePaths = listOf("src/A.kt"),
+                expectedOutput = "a patch",
+                capabilityHint = "backend",
+                child = 7,
+                status = SubAgentTaskStatus.COMPLETED,
+            ),
+        )
+
+        val plan = SubAgentResume.plan(
+            batchId = "batch-14",
+            storedUserMessageId = 1,
+            currentUserMessageId = 1,
+            stored = stored,
+            requested = requested(
+                "t" to false,
+                writePaths = listOf("src/A.kt"),
+                expectedOutput = "a patch",
+                capabilityHint = "backend",
+            ),
+            reusableChildIds = setOf(7),
+        )!!
+
+        assertEquals(SubAgentResume.Action.Reuse(7), plan.actions[0])
+    }
+
     private fun row(
         index: Int,
         text: String,
         writePaths: List<String> = emptyList(),
+        readOnly: Boolean = writePaths.isEmpty(),
+        expectedOutput: String = "",
+        capabilityHint: String = "",
         child: Long = 0L,
         status: String = SubAgentTaskStatus.PENDING,
     ) = SubAgentTaskRecord(
         index = index,
         taskText = text,
         writePaths = writePaths,
+        readOnly = readOnly,
+        expectedOutput = expectedOutput,
+        capabilityHint = capabilityHint,
         childConversationId = child,
         status = status,
     )
 
-    private fun requested(vararg tasks: Pair<String, Boolean>): List<SubAgentResume.RequestedTask> =
-        tasks.mapIndexed { index, (text, readOnly) -> SubAgentResume.RequestedTask(index, text, readOnly) }
+    private fun requested(
+        vararg tasks: Pair<String, Boolean>,
+        writePaths: List<String> = emptyList(),
+        expectedOutput: String = "",
+        capabilityHint: String = "",
+    ): List<SubAgentResume.RequestedTask> =
+        tasks.mapIndexed { index, (text, readOnly) ->
+            SubAgentResume.RequestedTask(index, text, readOnly, writePaths, expectedOutput, capabilityHint)
+        }
 }

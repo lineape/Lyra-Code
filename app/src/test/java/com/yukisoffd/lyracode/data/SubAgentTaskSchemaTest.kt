@@ -15,6 +15,10 @@ class SubAgentTaskSchemaTest {
             "child_conversation_id",
             "task_text",
             "write_paths",
+            "read_only",
+            "expected_output",
+            "capability_hint",
+            "user_message_id",
             "status",
             "delivered",
             "created_at",
@@ -23,7 +27,15 @@ class SubAgentTaskSchemaTest {
             assertTrue("missing column $column", ddl.contains(column))
         }
         assertTrue(ddl.contains("PRIMARY KEY (parent_conversation_id, batch_id, task_index)"))
-        assertEquals(13, SubAgentTaskSchema.DATABASE_VERSION)
+        assertEquals(14, SubAgentTaskSchema.DATABASE_VERSION)
         assertTrue(SubAgentTaskSchema.CREATE_INDEX.contains("idx_sub_agent_tasks_open"))
+    }
+
+    @Test
+    fun `the version 13 upgrade adds every identity column the resume match reads`() {
+        val upgrade = SubAgentTaskSchema.UPGRADE_13_TO_14.joinToString("\n")
+        listOf("read_only", "expected_output", "capability_hint", "user_message_id").forEach { column ->
+            assertTrue("missing column $column", upgrade.contains("ADD COLUMN $column "))
+        }
     }
 }

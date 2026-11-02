@@ -257,7 +257,10 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
             db.execSQL("ALTER TABLE messages ADD COLUMN deepseek_cache_hit_rate REAL NOT NULL DEFAULT -1")
         }
         if (oldVersion < 12) createUsageTokenIndex(db)
+        // From 13 the table is created with every column, so only a device that already ran
+        // version 13 needs the ALTERs.
         if (oldVersion < 13) createSubAgentTaskTable(db)
+        if (oldVersion in 13 until 14) SubAgentTaskSchema.UPGRADE_13_TO_14.forEach(db::execSQL)
     }
 
     fun createConversation(
@@ -287,11 +290,17 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
     }
 
     /**
-     * Writes the batch's task rows before any child starts. The rows carry the task text so a
-     * resume can prove the model asked for the same work, and the write paths so a resume can
-     * refuse to re-run an interrupted write without naming what it touched.
+     * Writes the batch's task rows before any child starts. The rows carry every task field so
+     * a resume can prove the model asked for the same work, the write paths so a resume can
+     * refuse to re-run an interrupted write without naming what it touched, and the id of the
+     * parent's last user message so a batch never answers a later turn.
      */
-    fun beginSubAgentBatch(parentConversationId: Long, batchId: String, tasks: List<SubAgentTaskSeed>) {
+    fun beginSubAgentBatch(
+        parentConversationId: Long,
+        batchId: String,
+        userMessageId: Long,
+        tasks: List<SubAgentTaskSeed>,
+    ) {
         val now = System.currentTimeMillis()
         val db = writableDatabase
         db.beginTransaction()
@@ -307,6 +316,10 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
                         put("child_conversation_id", 0L)
                         put("task_text", task.taskText)
                         put("write_paths", JSONArray(task.writePaths).toString())
+                        put("read_only", if (task.readOnly) 1 else 0)
+                        put("expected_output", task.expectedOutput)
+                        put("capability_hint", task.capabilityHint)
+                        put("user_message_id", userMessageId)
                         put("status", SubAgentTaskStatus.PENDING)
                         put("delivered", 0)
                         put("created_at", now)
@@ -358,9 +371,20 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
                 "GROUP BY batch_id ORDER BY MAX(updated_at) DESC LIMIT 1",
             arrayOf(parentConversationId.toString()),
         ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null } ?: return null
+        var userMessageId = 0L
         val tasks = db.query(
             "sub_agent_tasks",
-            arrayOf("task_index", "task_text", "write_paths", "child_conversation_id", "status"),
+            arrayOf(
+                "task_index",
+                "task_text",
+                "write_paths",
+                "read_only",
+                "expected_output",
+                "capability_hint",
+                "child_conversation_id",
+                "status",
+                "user_message_id",
+            ),
             "parent_conversation_id=? AND batch_id=? AND delivered=0",
             arrayOf(parentConversationId.toString(), batchId),
             null,
@@ -369,20 +393,44 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
         ).use { cursor ->
             buildList {
                 while (cursor.moveToNext()) {
+                    if (isEmpty()) userMessageId = cursor.getLong(8)
                     add(
                         SubAgentTaskRecord(
                             index = cursor.getInt(0),
                             taskText = cursor.getString(1),
                             writePaths = parseSubAgentWritePaths(cursor.getString(2)),
-                            childConversationId = cursor.getLong(3),
-                            status = cursor.getString(4),
+                            readOnly = cursor.getInt(3) != 0,
+                            expectedOutput = cursor.getString(4).orEmpty(),
+                            capabilityHint = cursor.getString(5).orEmpty(),
+                            childConversationId = cursor.getLong(6),
+                            status = cursor.getString(7),
                         ),
                     )
                 }
             }
         }
         if (tasks.isEmpty()) return null
-        return OpenSubAgentBatch(batchId, tasks)
+        return OpenSubAgentBatch(batchId, userMessageId, tasks)
+    }
+
+    /** The id of the conversation's newest user message, or 0 when it has none. */
+    fun lastUserMessageId(conversationId: Long): Long =
+        readableDatabase.rawQuery(
+            "SELECT MAX(id) FROM messages WHERE conversation_id=? AND role='user'",
+            arrayOf(conversationId.toString()),
+        ).use { cursor -> if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else 0L }
+
+    /** Closes every undelivered batch for the conversation; the next call starts fresh. */
+    private fun abandonOpenSubAgentBatches(conversationId: Long) {
+        writableDatabase.update(
+            "sub_agent_tasks",
+            ContentValues().apply {
+                put("delivered", 1)
+                put("updated_at", System.currentTimeMillis())
+            },
+            "parent_conversation_id=? AND delivered=0",
+            arrayOf(conversationId.toString()),
+        )
     }
 
     /** Closes the batch so a later `run_sub_agents` call never reuses its rows. */
@@ -619,6 +667,9 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
     fun deleteConversation(id: Long) {
         writableDatabase.delete("usage_model_requests", "conversation_id=?", arrayOf(id.toString()))
         writableDatabase.delete("usage_message_events", "conversation_id=?", arrayOf(id.toString()))
+        // Batch rows die with their parent. Conversation ids do not recur, but leaving the rows
+        // behind would keep a stale "open batch" for a conversation that no longer exists.
+        writableDatabase.delete("sub_agent_tasks", "parent_conversation_id=?", arrayOf(id.toString()))
         writableDatabase.delete("messages", "conversation_id=?", arrayOf(id.toString()))
         writableDatabase.delete("conversations", "id=?", arrayOf(id.toString()))
     }
@@ -970,6 +1021,9 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
             "conversation_id=? AND id>?",
             arrayOf(conversationId.toString(), messageId.toString()),
         )
+        // Editing or regenerating a message deletes its turn: the batch that turn opened can no
+        // longer answer this conversation, so it must not be resumed by the new turn.
+        abandonOpenSubAgentBatches(conversationId)
         conversation(conversationId)?.takeIf { it.compressedThroughMessageId >= messageId }?.let {
             clearCompressedContext(conversationId)
         }
@@ -1361,6 +1415,7 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
         if (mode == "replace") {
             writableDatabase.delete("usage_model_requests", null, null)
             writableDatabase.delete("usage_message_events", null, null)
+            writableDatabase.delete("sub_agent_tasks", null, null)
             writableDatabase.delete("messages", null, null)
             writableDatabase.delete("conversations", null, null)
             writableDatabase.delete("projects", null, null)

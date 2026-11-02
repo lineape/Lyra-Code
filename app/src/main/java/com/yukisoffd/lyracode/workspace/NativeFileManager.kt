@@ -199,7 +199,12 @@ class NativeFileManager(
     private fun backupExistingTextFile(path: String) {
         if (path.endsWith(".bak", ignoreCase = true)) return
         val source = resolve(path)?.takeIf { it.isFile } ?: return
-        val backup = findOrCreateFile("${normalize(path)}.bak")
+        val backupPath = "${normalize(path)}.bak"
+        // Never replace an existing backup. After an interrupted write the target may already be
+        // truncated, and a later write would copy that truncated file over the only good copy.
+        // Keeping the first backup also makes it the state before the task, not the last write.
+        if (resolve(backupPath)?.isFile == true) return
+        val backup = findOrCreateFile(backupPath)
         context.contentResolver.openInputStream(source.uri)?.buffered()?.use { input ->
             context.contentResolver.openOutputStream(backup.uri, "wt")?.buffered()?.use { output ->
                 input.copyTo(output)

@@ -40,6 +40,9 @@ class NativeFileManager(
         readText(path, MAX_READ_BYTES)
     }
 
+    /** True when the workspace-relative path exists. Cheap: resolves the document, does not read it. */
+    fun exists(path: String): Boolean = runCatching { resolve(path)?.exists() == true }.getOrDefault(false)
+
     fun readFileForEdit(path: String): Result<String> = runCatching {
         readText(path, MAX_EDIT_BYTES)
     }

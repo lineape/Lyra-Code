@@ -21,7 +21,10 @@ import com.yukisoffd.lyracode.data.messageTokenCosts
 import com.yukisoffd.lyracode.data.McpServerConfig
 import com.yukisoffd.lyracode.data.McpToolDefinition
 import com.yukisoffd.lyracode.data.MediaGenerationKind
+import com.yukisoffd.lyracode.data.OpenSubAgentBatch
 import com.yukisoffd.lyracode.data.SubAgentConfig
+import com.yukisoffd.lyracode.data.SubAgentTaskSeed
+import com.yukisoffd.lyracode.data.SubAgentTaskStatus
 import com.yukisoffd.lyracode.debian.ProotCommandExecutor
 import com.yukisoffd.lyracode.filetransfer.FileTransferClient
 import com.yukisoffd.lyracode.email.EmailClient
@@ -59,8 +62,9 @@ import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 import java.util.TimeZone
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 
@@ -2566,105 +2570,264 @@ class OpenAiAgent(
             }
         }
         val owners = tasks.indices.associateWith { index -> SubAgentWriteOwner(parentConversationId, index) }
+        val requested = tasks.mapIndexed { index, task ->
+            SubAgentResume.RequestedTask(index = index, text = task.task, readOnly = task.readOnly)
+        }
+        // A batch that never delivered a result to this parent can be resumed when the model
+        // asks for the same tasks again. Anything else abandons the stale rows.
+        val openBatch = conversationStore.openSubAgentBatch(parentConversationId)
+        val plan = openBatch?.let { buildSubAgentResumePlan(it, requested) }
+        val batchId = plan?.batchId ?: UUID.randomUUID().toString()
+        if (plan == null) {
+            openBatch?.let { conversationStore.markSubAgentBatchDelivered(parentConversationId, it.batchId) }
+            conversationStore.beginSubAgentBatch(
+                parentConversationId,
+                batchId,
+                tasks.mapIndexed { index, task ->
+                    SubAgentTaskSeed(
+                        index,
+                        task.task,
+                        task.writePaths.map(subAgentWriteCoordinator::normalizeWorkspacePath),
+                    )
+                },
+            )
+        } else {
+            onStatus(context.getString(R.string.status_sub_agent_resuming, plan.reusedIndices.size, tasks.size))
+        }
+        val actions = plan?.actions ?: tasks.indices.associateWith { SubAgentResume.Action.Run }
+        val runIndices = actions.filterValues { it is SubAgentResume.Action.Run }.keys.sorted()
         subAgentRuns.begin(parentConversationId)
         subAgentRunStateChanged?.invoke()
         try {
+        // Reserve only the write paths of the tasks that will actually run. A reused task does
+        // not touch the workspace, and an interrupted write task is reported, never re-run.
         val batchReservation = subAgentWriteCoordinator.reserveBatch(
-            owners.entries.associate { (index, owner) -> owner to tasks[index].writePaths },
+            runIndices.associate { index -> owners.getValue(index) to tasks[index].writePaths },
         )
         try {
-            val results = JSONArray()
+            val results = arrayOfNulls<JSONObject>(tasks.size)
             val assignmentCounts = mutableMapOf<String, Int>()
-            tasks.forEachIndexed { index, task ->
-                currentCoroutineContext().ensureActive()
+            // Assignment runs in task order for every task, reused ones included, so a resumed
+            // batch assigns the same agent a fresh batch would have.
+            val assignments = tasks.mapIndexed { index, task ->
                 val agentConfig = chooseSubAgent(candidates, task, index, assignmentCounts)
                 assignmentCounts[agentConfig.id] = (assignmentCounts[agentConfig.id] ?: 0) + 1
-                onStatus(
-                    context.getString(
-                        R.string.status_sub_agent_progress_running,
-                        index,
-                        tasks.size,
-                        agentConfig.name,
-                    ),
-                )
-                val profile = settings.profiles().firstOrNull { it.id == agentConfig.profileId }
-                if (profile == null) {
-                    results.put(subAgentError(index, agentConfig, task, "Model profile does not exist: ${agentConfig.profileId}"))
-                    onStatus(context.getString(R.string.status_sub_agent_progress, index + 1, tasks.size))
-                    return@forEachIndexed
-                }
-                val model = agentConfig.model.ifBlank { profile.selectedModel }
-                val childConversationId = conversationStore.createConversation(
-                    profileId = profile.id,
-                    model = model,
-                    title = "子代理 ${index + 1}: ${task.task.take(32)}",
-                    mode = ConversationStore.MODE_SUBAGENT,
-                )
-                val normalizedWritePaths = task.writePaths
-                    .map(subAgentWriteCoordinator::normalizeWorkspacePath)
-                    .toSortedSet()
-                subAgentContexts[childConversationId] = SubAgentExecutionContext(
-                    owner = owners.getValue(index),
-                    agent = agentConfig,
-                    readOnly = task.readOnly,
-                    writePaths = normalizedWritePaths,
-                )
-                try {
-                    val prompt = buildSubAgentPrompt(task)
-                    conversationStore.addMessage(childConversationId, "user", prompt, profileId = profile.id, model = model)
-                    runLoop(
-                        childConversationId,
-                        profile,
-                        model,
-                        onUpdate = { update ->
-                            if (update.status.isNotBlank()) {
-                                onStatus(
-                                    context.getString(
-                                        R.string.status_sub_agent_progress_detail,
-                                        index,
-                                        tasks.size,
-                                        agentConfig.name,
-                                        update.status,
-                                    ),
-                                )
-                            }
-                        },
-                        propagateErrors = false,
+                agentConfig
+            }
+            tasks.forEachIndexed { index, task ->
+                currentCoroutineContext().ensureActive()
+                results[index] = when (val action = actions.getValue(index)) {
+                    is SubAgentResume.Action.Reuse -> {
+                        onStatus(context.getString(R.string.status_sub_agent_progress, index + 1, tasks.size))
+                        reusedSubAgentResult(index, task, assignments[index], action.childConversationId)
+                    }
+                    is SubAgentResume.Action.InterruptedWrite -> {
+                        onStatus(context.getString(R.string.status_sub_agent_progress, index + 1, tasks.size))
+                        interruptedSubAgentResult(index, task, assignments[index], action)
+                    }
+                    SubAgentResume.Action.Run -> runSubAgentTask(
+                        parentConversationId = parentConversationId,
+                        batchId = batchId,
+                        index = index,
+                        tasks = tasks,
+                        agentConfig = assignments[index],
+                        owner = owners.getValue(index),
+                        onStatus = onStatus,
                     )
-                    val assistant = conversationStore.messages(childConversationId).lastOrNull { it.role == "assistant" }
-                    results.put(
-                        JSONObject()
-                            .put("index", index + 1)
-                            .put("agent", agentConfig.name)
-                            .put("profile_id", profile.id)
-                            .put("model", model)
-                            .put("task", task.task)
-                            .put("read_only", task.readOnly)
-                            .put("write_paths", JSONArray(normalizedWritePaths.toList()))
-                            .put("capability_hint", task.capabilityHint)
-                            .put("expected_output", task.expectedOutput)
-                            .put("result", assistant?.content.orEmpty())
-                            .put("status", conversationStore.conversation(childConversationId)?.status ?: "unknown"),
-                    )
-                } finally {
-                    subAgentContexts.remove(childConversationId)
                 }
-                onStatus(context.getString(R.string.status_sub_agent_progress, index + 1, tasks.size))
             }
             onStatus(context.getString(R.string.status_sub_agent_progress, tasks.size, tasks.size))
-            return stableJson(
-                JSONObject()
-                    .put("schema", "lyra_sub_agent_results_v2")
-                    .put("parent_conversation_id", parentConversationId)
-                    .put("results", results),
-            )
+            val ordered = JSONArray()
+            results.forEachIndexed { index, result ->
+                ordered.put(
+                    result ?: subAgentError(index, assignments[index], tasks[index], "Sub-agent task produced no result."),
+                )
+            }
+            val payload = JSONObject()
+                .put("schema", "lyra_sub_agent_results_v2")
+                .put("parent_conversation_id", parentConversationId)
+                .put("results", ordered)
+            if (plan != null) {
+                payload
+                    .put("resumed", true)
+                    .put("reused_task_indexes", JSONArray(plan.reusedIndices.map { it + 1 }))
+                    .put("interrupted_task_indexes", JSONArray(plan.interruptedIndices.map { it + 1 }))
+                    .put(
+                        "resume_note",
+                        "This batch resumed after an app restart. Tasks in reused_task_indexes returned their " +
+                            "stored results and were not run again. Tasks in interrupted_task_indexes were NOT " +
+                            "re-run because they may have changed files; check each write path and its backup " +
+                            "before continuing.",
+                    )
+            }
+            conversationStore.markSubAgentBatchDelivered(parentConversationId, batchId)
+            return stableJson(payload)
         } finally {
             batchReservation.close()
         }
         } finally {
-            // Cancellation and tool failures must both clear the wait state.
+            // Cancellation and tool failures must both clear the wait state; the batch rows
+            // stay open, so the next run_sub_agents call resumes them.
             subAgentRuns.end(parentConversationId)
             subAgentRunStateChanged?.invoke()
+        }
+    }
+
+    /**
+     * Builds the resume plan from the newest undelivered batch, or null when the model asked
+     * for a different set of tasks (in which case the open batch is abandoned, not merged).
+     */
+    private fun buildSubAgentResumePlan(
+        batch: OpenSubAgentBatch,
+        requested: List<SubAgentResume.RequestedTask>,
+    ): SubAgentResume.Plan? {
+        val reusable = batch.tasks.mapNotNull { row ->
+            row.childConversationId.takeIf { it > 0 && childProducedResult(it) }
+        }.toSet()
+        val backupPaths = batch.tasks
+            .flatMap { row -> row.writePaths.map { "$it.bak" } }
+            .filter { nativeFileManager.exists(it) }
+            .toSet()
+        return SubAgentResume.plan(batch.batchId, batch.tasks, requested, reusable, backupPaths)
+    }
+
+    /** A child that returned normally has an idle conversation whose last message is its answer. */
+    private fun childProducedResult(conversationId: Long): Boolean =
+        conversationStore.conversation(conversationId)?.status == ConversationStore.STATUS_IDLE &&
+            conversationStore.messages(conversationId).lastOrNull()?.role == "assistant"
+
+    private fun reusedSubAgentResult(
+        index: Int,
+        task: SubAgentTask,
+        agentConfig: SubAgentConfig,
+        childConversationId: Long,
+    ): JSONObject {
+        val conversation = conversationStore.conversation(childConversationId)
+        val assistant = conversationStore.messages(childConversationId).lastOrNull { it.role == "assistant" }
+        return JSONObject()
+            .put("index", index + 1)
+            .put("agent", agentConfig.name)
+            .put("profile_id", conversation?.profileId.orEmpty())
+            .put("model", conversation?.model.orEmpty())
+            .put("task", task.task)
+            .put("read_only", task.readOnly)
+            .put("write_paths", JSONArray(task.writePaths))
+            .put("capability_hint", task.capabilityHint)
+            .put("expected_output", task.expectedOutput)
+            .put("result", assistant?.content.orEmpty())
+            .put("status", conversation?.status ?: "unknown")
+            .put("reused", true)
+    }
+
+    private fun interruptedSubAgentResult(
+        index: Int,
+        task: SubAgentTask,
+        agentConfig: SubAgentConfig,
+        action: SubAgentResume.Action.InterruptedWrite,
+    ): JSONObject {
+        return JSONObject()
+            .put("index", index + 1)
+            .put("agent", agentConfig.name)
+            .put("task", task.task)
+            .put("read_only", false)
+            .put("write_paths", JSONArray(action.writePaths))
+            .put("backup_paths", JSONArray(action.backupPaths))
+            .put("status", "interrupted")
+            .put("interrupted", true)
+            .put(
+                "error",
+                "This write task was interrupted by an app restart. It was not re-run because it may have " +
+                    "changed files. Inspect every write path and its .bak copy before deciding what to do.",
+            )
+    }
+
+    private suspend fun runSubAgentTask(
+        parentConversationId: Long,
+        batchId: String,
+        index: Int,
+        tasks: List<SubAgentTask>,
+        agentConfig: SubAgentConfig,
+        owner: SubAgentWriteOwner,
+        onStatus: suspend (String) -> Unit,
+    ): JSONObject {
+        val task = tasks[index]
+        onStatus(
+            context.getString(
+                R.string.status_sub_agent_progress_running,
+                index,
+                tasks.size,
+                agentConfig.name,
+            ),
+        )
+        val profile = settings.profiles().firstOrNull { it.id == agentConfig.profileId }
+        if (profile == null) {
+            conversationStore.setSubAgentTaskStatus(parentConversationId, batchId, index, SubAgentTaskStatus.FAILED)
+            onStatus(context.getString(R.string.status_sub_agent_progress, index + 1, tasks.size))
+            return subAgentError(index, agentConfig, task, "Model profile does not exist: ${agentConfig.profileId}")
+        }
+        val model = agentConfig.model.ifBlank { profile.selectedModel }
+        val childConversationId = conversationStore.createConversation(
+            profileId = profile.id,
+            model = model,
+            title = "子代理 ${index + 1}: ${task.task.take(32)}",
+            mode = ConversationStore.MODE_SUBAGENT,
+        )
+        conversationStore.attachSubAgentTaskChild(parentConversationId, batchId, index, childConversationId)
+        val normalizedWritePaths = task.writePaths
+            .map(subAgentWriteCoordinator::normalizeWorkspacePath)
+            .toSortedSet()
+        subAgentContexts[childConversationId] = SubAgentExecutionContext(
+            owner = owner,
+            agent = agentConfig,
+            readOnly = task.readOnly,
+            writePaths = normalizedWritePaths,
+        )
+        var persistedStatus = SubAgentTaskStatus.FAILED
+        try {
+            val prompt = buildSubAgentPrompt(task)
+            conversationStore.addMessage(childConversationId, "user", prompt, profileId = profile.id, model = model)
+            runLoop(
+                childConversationId,
+                profile,
+                model,
+                onUpdate = { update ->
+                    if (update.status.isNotBlank()) {
+                        onStatus(
+                            context.getString(
+                                R.string.status_sub_agent_progress_detail,
+                                index,
+                                tasks.size,
+                                agentConfig.name,
+                                update.status,
+                            ),
+                        )
+                    }
+                },
+                propagateErrors = false,
+            )
+            val assistant = conversationStore.messages(childConversationId).lastOrNull { it.role == "assistant" }
+            persistedStatus = when {
+                conversationStore.conversation(childConversationId)?.status == ConversationStore.STATUS_INTERRUPTED ->
+                    SubAgentTaskStatus.INTERRUPTED
+                assistant != null -> SubAgentTaskStatus.COMPLETED
+                else -> SubAgentTaskStatus.FAILED
+            }
+            return JSONObject()
+                .put("index", index + 1)
+                .put("agent", agentConfig.name)
+                .put("profile_id", profile.id)
+                .put("model", model)
+                .put("task", task.task)
+                .put("read_only", task.readOnly)
+                .put("write_paths", JSONArray(normalizedWritePaths.toList()))
+                .put("capability_hint", task.capabilityHint)
+                .put("expected_output", task.expectedOutput)
+                .put("result", assistant?.content.orEmpty())
+                .put("status", conversationStore.conversation(childConversationId)?.status ?: "unknown")
+        } finally {
+            subAgentContexts.remove(childConversationId)
+            conversationStore.setSubAgentTaskStatus(parentConversationId, batchId, index, persistedStatus)
+            onStatus(context.getString(R.string.status_sub_agent_progress, index + 1, tasks.size))
         }
     }
 

@@ -2691,10 +2691,12 @@ class OpenAiAgent(
         return SubAgentResume.plan(batch.batchId, batch.tasks, requested, reusable, backupPaths)
     }
 
-    /** A child that returned normally has an idle conversation whose last message is its answer. */
-    private fun childProducedResult(conversationId: Long): Boolean =
-        conversationStore.conversation(conversationId)?.status == ConversationStore.STATUS_IDLE &&
-            conversationStore.messages(conversationId).lastOrNull()?.role == "assistant"
+    /** A child that returned normally is idle with a non-blank assistant answer; see [SubAgentResume.childFinished]. */
+    private fun childProducedResult(conversationId: Long): Boolean {
+        val conversation = conversationStore.conversation(conversationId) ?: return false
+        val last = conversationStore.messages(conversationId).lastOrNull()
+        return SubAgentResume.childFinished(conversation.status, last?.role, last?.content)
+    }
 
     private fun reusedSubAgentResult(
         index: Int,
@@ -2785,6 +2787,11 @@ class OpenAiAgent(
         var persistedStatus = SubAgentTaskStatus.FAILED
         try {
             val prompt = buildSubAgentPrompt(task)
+            // A child is idle from creation until the loop ends. Mark it running before the
+            // loop so a process death mid-turn is visible to the resume planner: runLoop writes
+            // idle only after the final message, so idle then means finished and running means
+            // the child was interrupted before it could produce an answer.
+            conversationStore.setConversationMeta(childConversationId, status = ConversationStore.STATUS_RUNNING)
             conversationStore.addMessage(childConversationId, "user", prompt, profileId = profile.id, model = model)
             runLoop(
                 childConversationId,
@@ -2824,6 +2831,11 @@ class OpenAiAgent(
                 .put("expected_output", task.expectedOutput)
                 .put("result", assistant?.content.orEmpty())
                 .put("status", conversationStore.conversation(childConversationId)?.status ?: "unknown")
+        } catch (cancelled: CancellationException) {
+            // A cancelled child is interrupted, not failed: the resume must not treat its
+            // partial conversation as a finished task.
+            persistedStatus = SubAgentTaskStatus.INTERRUPTED
+            throw cancelled
         } finally {
             subAgentContexts.remove(childConversationId)
             conversationStore.setSubAgentTaskStatus(parentConversationId, batchId, index, persistedStatus)

@@ -111,9 +111,82 @@ class SubAgentResumeTest {
             batchId = "batch-6",
             stored = stored,
             requested = requested("edit" to false),
+            reusableChildIds = setOf(401),
         )!!
 
         assertEquals(SubAgentResume.Action.Reuse(401), plan.actions[0])
+    }
+
+    @Test
+    fun `a completed write task whose child is gone is interrupted, not reused with an empty result`() {
+        val stored = listOf(
+            row(0, "edit", writePaths = listOf("src/A.kt"), child = 401, status = SubAgentTaskStatus.COMPLETED),
+        )
+
+        val plan = SubAgentResume.plan(
+            batchId = "batch-6b",
+            stored = stored,
+            requested = requested("edit" to false),
+        )!!
+
+        assertEquals(SubAgentResume.Action.InterruptedWrite(listOf("src/A.kt"), emptyList()), plan.actions[0])
+    }
+
+    @Test
+    fun `a child killed before it finished is not reusable, so its write is reported instead`() {
+        val stored = listOf(
+            row(0, "edit", writePaths = listOf("src/A.kt"), child = 501, status = SubAgentTaskStatus.RUNNING),
+        )
+
+        val plan = SubAgentResume.plan(
+            batchId = "batch-6c",
+            stored = stored,
+            requested = requested("edit" to false),
+            // The old childProducedResult would have put this id here for idle + assistant.
+            reusableChildIds = emptySet(),
+            backupPaths = setOf("src/A.kt.bak"),
+        )!!
+
+        assertEquals(
+            SubAgentResume.Action.InterruptedWrite(listOf("src/A.kt"), listOf("src/A.kt.bak")),
+            plan.actions[0],
+        )
+    }
+
+    @Test
+    fun `a child that is idle with a non-blank assistant answer has finished`() {
+        assertTrue(SubAgentResume.childFinished("idle", "assistant", "the answer"))
+    }
+
+    @Test
+    fun `a child that is running with partial text has not finished`() {
+        assertEquals(false, SubAgentResume.childFinished("running", "assistant", "half an ans"))
+    }
+
+    @Test
+    fun `a child killed before its first token has not finished`() {
+        assertEquals(false, SubAgentResume.childFinished("running", "assistant", ""))
+    }
+
+    @Test
+    fun `a child whose last message is a tool result has not finished`() {
+        assertEquals(false, SubAgentResume.childFinished("idle", "tool", "tool output"))
+    }
+
+    @Test
+    fun `a child that is idle but blank has not finished`() {
+        assertEquals(false, SubAgentResume.childFinished("idle", "assistant", " "))
+        assertEquals(false, SubAgentResume.childFinished("idle", "assistant", null))
+    }
+
+    @Test
+    fun `a child whose conversation is gone has not finished`() {
+        assertEquals(false, SubAgentResume.childFinished(null, null, null))
+    }
+
+    @Test
+    fun `a child interrupted when its run was cancelled has not finished`() {
+        assertEquals(false, SubAgentResume.childFinished("interrupted", "assistant", "part"))
     }
 
     @Test

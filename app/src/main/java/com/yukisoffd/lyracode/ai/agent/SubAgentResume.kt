@@ -1,7 +1,7 @@
 package com.yukisoffd.lyracode.ai
 
+import com.yukisoffd.lyracode.data.ConversationStore
 import com.yukisoffd.lyracode.data.SubAgentTaskRecord
-import com.yukisoffd.lyracode.data.SubAgentTaskStatus
 
 /**
  * Decides what a `run_sub_agents` call does when its parent conversation has an undelivered
@@ -40,13 +40,33 @@ internal object SubAgentResume {
     }
 
     /**
+     * True only when the child conversation returned normally: it is idle and its last message
+     * is a non-blank assistant answer.
+     *
+     * [com.yukisoffd.lyracode.ai.agent.OpenAiAgent.runSubAgentTask] writes RUNNING before
+     * `runLoop` starts, and `runLoop` writes idle only after the final message, so a process
+     * death leaves the child running or interrupted. A child killed before its first token,
+     * mid-stream or inside `write_file` therefore never looks finished, and its partial text
+     * is never handed back as a result. A child whose conversation no longer exists did not
+     * finish either.
+     */
+    fun childFinished(
+        conversationStatus: String?,
+        lastMessageRole: String?,
+        lastMessageContent: String?,
+    ): Boolean = conversationStatus == ConversationStore.STATUS_IDLE &&
+        lastMessageRole == "assistant" &&
+        !lastMessageContent.isNullOrBlank()
+
+    /**
      * Returns null when the stored batch is not the batch the model just asked for: a different
      * task count or different task text at any index. A null plan starts a fresh batch.
      *
-     * [reusableChildIds] are child conversations that produced a final assistant message even
+     * [reusableChildIds] are child conversations that [childFinished] proved finished even
      * though their row never recorded completion, which is exactly the "finished child whose
-     * result never reached the parent" case. [backupPaths] are the workspace-relative `.bak`
-     * paths that exist right now.
+     * result never reached the parent" case. A write task whose child is not in that set is
+     * never re-run: the interrupted write beats reuse. [backupPaths] are the workspace-relative
+     * `.bak` paths that exist right now.
      */
     fun plan(
         batchId: String,
@@ -62,8 +82,7 @@ internal object SubAgentResume {
         val actions = requested.associate { task ->
             val row = ordered[task.index]
             task.index to when {
-                row.childConversationId > 0 &&
-                    (row.status == SubAgentTaskStatus.COMPLETED || row.childConversationId in reusableChildIds) ->
+                row.childConversationId > 0 && row.childConversationId in reusableChildIds ->
                     Action.Reuse(row.childConversationId)
                 row.childConversationId == 0L -> Action.Run
                 task.readOnly -> Action.Run

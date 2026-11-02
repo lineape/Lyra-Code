@@ -393,12 +393,14 @@ class ChatController(
         COMPRESSING,
     }
 
-    // The run scope lives with the foreground service's companion, so the process is raised
-    // to foreground priority for as long as any conversation job runs.
-    private val scope = AgentRunForegroundService.runScope
+    // Each controller owns its runs. The foreground service only raises the process priority
+    // while a run is in flight; it does not own the coroutines, so a service stop can never
+    // cancel them and a cancelled controller scope can never leak the service or the wake lock.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val stopRunsToken = Any()
 
     init {
-        AgentRunForegroundService.stopRuns = { stopAllActiveRuns() }
+        AgentRunForegroundService.bindStopRuns(stopRunsToken) { stopAllActiveRuns() }
     }
 
     private val deviceConversationUpdateListener: (Long, ChatUpdate) -> Unit = { conversationId, update ->
@@ -568,6 +570,10 @@ class ChatController(
         pendingInputScope.cancel()
         pendingInputExecutor.shutdown()
         runCatching { pendingInputExecutor.awaitTermination(5, TimeUnit.SECONDS) }
+        // The destroyed controller must not stay registered as the notification's stop target.
+        AgentRunForegroundService.unbindStopRuns(stopRunsToken)
+        // This scope belongs to this controller: a recreate builds a new controller with a new
+        // scope, so cancelling here stops this controller's runs and nothing else.
         scope.cancel()
     }
 
@@ -1692,7 +1698,16 @@ class ChatController(
 
     /** Stops every conversation run; the run notification's stop action calls this. */
     internal fun stopAllActiveRuns() {
-        jobs.keys.toList().forEach { conversationId -> jobs[conversationId]?.cancel() }
+        // A scoped device task owns its conversation outside the controller's job registry.
+        if (DeviceTaskCoordinator.isRunning()) DeviceTaskCoordinator.pause()
+        val conversationIds = jobs.keys.toList()
+        conversationIds.forEach(::stopConversationRun)
+        if (conversationIds.isNotEmpty()) {
+            reloadConversations()
+            reloadMessages()
+            val active = activeConversationId.value
+            if (active in conversationIds) status.value = appContext.getString(R.string.status_interrupted)
+        }
     }
 
     fun stopActive() {
@@ -1704,6 +1719,18 @@ class ChatController(
             status.value = appContext.getString(R.string.status_interrupted)
             return
         }
+        stopConversationRun(conversationId)
+        reloadConversations()
+        reloadMessages()
+        status.value = appContext.getString(R.string.status_interrupted)
+    }
+
+    /**
+     * The one stop path for a conversation run: cancel it and clear everything the run leaves
+     * pending. Stop from the composer and Stop from the run notification both come here, so a
+     * pending approval, question or parked input cannot outlive the run on either path.
+     */
+    private fun stopConversationRun(conversationId: Long) {
         jobs[conversationId]?.cancel()
         conversationOperations.remove(conversationId)
         // Park synchronously: a new send can supersede the cancelled job before its
@@ -1726,9 +1753,6 @@ class ChatController(
             pendingUserQuestion.value = null
             userQuestionIdleTimeout.cancel()
         }
-        reloadConversations()
-        reloadMessages()
-        status.value = appContext.getString(R.string.status_interrupted)
     }
 
     internal fun stopChatGptAccountRequests(clientId: String) {
@@ -2029,36 +2053,30 @@ class ChatController(
         onOutcome: (ConversationRunOutcome) -> Unit = {},
         block: suspend CoroutineScope.() -> Unit,
     ): Job {
-        lateinit var launchedJob: Job
-        launchedJob = scope.launch(start = CoroutineStart.LAZY) {
-            var failure: Throwable? = null
-            try {
-                conversationRunGate.run(conversationId) { block() }
-            } catch (error: Throwable) {
-                failure = error
-                throw error
-            } finally {
-                // A cancelled job may finish after a new operation has already
-                // started for this conversation. Only clear our own state. A
-                // superseded run also skips its outcome callback here because
-                // the registry entry now belongs to the newer job. Deletion
-                // paths report Cancelled through cancelConversationJob instead.
-                if (jobs[conversationId] === launchedJob) {
-                    jobs.remove(conversationId)
-                    conversationOperations.remove(conversationId)
-                    val outcomeCallback = jobOutcomes.remove(conversationId)
-                    val status = runCatching { conversationStore.conversation(conversationId)?.status }.getOrNull()
-                    val outcome = classifyRunOutcome(failure, status)
-                    runCatching { outcomeCallback?.invoke(outcome) }
-                }
-                // The foreground service is only a lifetime signal: drop it when the last
-                // conversation job finishes, so no notification outlives the work.
-                if (jobs.isEmpty()) AgentRunForegroundService.stop(appContext)
-            }
+        val launchedJob = scope.launch(start = CoroutineStart.LAZY) {
+            conversationRunGate.run(conversationId) { block() }
         }
         jobs[conversationId] = launchedJob
         jobOutcomes[conversationId] = onOutcome
         conversationOperations[conversationId] = operation
+        // Completion, not the body's finally: a LAZY job cancelled before its first dispatch
+        // never enters the body, and its outcome and service stop would be lost with it.
+        launchedJob.invokeOnCompletion { cause ->
+            // A cancelled job may finish after a new operation has already started for this
+            // conversation. Only clear our own state. A superseded run also skips its outcome
+            // callback here because the registry entry now belongs to the newer job. Deletion
+            // paths report Cancelled through cancelConversationJob instead.
+            if (jobs[conversationId] === launchedJob) {
+                jobs.remove(conversationId)
+                conversationOperations.remove(conversationId)
+                val outcomeCallback = jobOutcomes.remove(conversationId)
+                val status = runCatching { conversationStore.conversation(conversationId)?.status }.getOrNull()
+                runCatching { outcomeCallback?.invoke(classifyRunOutcome(cause, status)) }
+            }
+            // The foreground service is only a lifetime signal: drop it when the last
+            // conversation job finishes, so no notification outlives the work.
+            if (jobs.isEmpty()) AgentRunForegroundService.stop(appContext)
+        }
         AgentRunForegroundService.start(appContext)
         launchedJob.start()
         return launchedJob

@@ -2,7 +2,10 @@ package com.yukisoffd.lyracode.ai
 
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
@@ -26,10 +29,17 @@ internal sealed interface SubAgentCallOutcome<out T> {
  * - Cancelling the caller's job cancels every running child, because all of them are children
  *   of the caller's coroutine scope. A child that throws [CancellationException] on its own is
  *   reported as that child's failure and does not cancel its siblings.
+ * - Children run in the caller's context plus [childContext]. A child that blocks its thread
+ *   runs in parallel only when that context has more than one thread. [childContext] must not
+ *   carry a [Job], so every child stays a child of the caller's scope.
  */
-internal class SubAgentBatchRunner(private val maxConcurrency: Int) {
+internal class SubAgentBatchRunner(
+    private val maxConcurrency: Int,
+    private val childContext: CoroutineContext = EmptyCoroutineContext,
+) {
     suspend fun <T> run(count: Int, block: suspend (index: Int) -> T): List<SubAgentCallOutcome<T>> {
         require(count >= 0) { "Sub-agent task count must not be negative." }
+        require(childContext[Job] == null) { "The child context must not carry a Job." }
         if (count == 0) return emptyList()
         val permits = maxConcurrency.coerceAtLeast(1)
         return coroutineScope {
@@ -40,7 +50,7 @@ internal class SubAgentBatchRunner(private val maxConcurrency: Int) {
             // acquire throws here; coroutineScope then cancels the children already launched.
             val jobs = (0 until count).map { index ->
                 semaphore.acquire()
-                launch {
+                launch(childContext) {
                     try {
                         outcomes[index] = try {
                             SubAgentCallOutcome.Completed(block(index))

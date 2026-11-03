@@ -80,7 +80,12 @@ internal class ChatRuntime private constructor(context: Context) {
 
     fun detach(activity: MainActivity) {
         check(Looper.myLooper() == Looper.getMainLooper())
-        owner.detach(activity)
+        if (owner.isAttached(activity)) {
+            owner.detach(activity)
+            // Stop Activity-scoped listeners without cancelling the controller's runs.
+            miniServerManager.stop()
+            localMcpServerManager.stop(saveDisabled = false)
+        }
     }
 
     internal fun isAttached(activity: MainActivity): Boolean = owner.isAttached(activity)

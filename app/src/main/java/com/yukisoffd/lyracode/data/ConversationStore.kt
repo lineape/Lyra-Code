@@ -418,9 +418,28 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
         return started
     }
 
-    /** Started write tasks of every undelivered batch, for the controller-start backup copy. */
-    fun openSubAgentWritePaths(): List<String> =
-        startedWriteRows("delivered=0", emptyArray()).flatMap { it.writePaths }.distinct()
+    /**
+     * Started write tasks of every undelivered batch, for the controller-start backup copy. Each
+     * path carries its batch and its parent conversation's workspace, because at controller start
+     * no conversation is selected and the active workspace need not be the row's.
+     */
+    fun openSubAgentWriteTasks(): List<InterruptedWritePath> =
+        readableDatabase.rawQuery(
+            "SELECT t.batch_id, t.write_paths, c.workspace_uri" +
+                " FROM sub_agent_tasks t LEFT JOIN conversations c ON c.id = t.parent_conversation_id" +
+                " WHERE t.child_conversation_id>0 AND t.write_paths<>'[]' AND t.delivered=0",
+            null,
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    val batchId = cursor.getString(0).orEmpty()
+                    val workspaceUri = cursor.getString(2).orEmpty()
+                    parseSubAgentWritePaths(cursor.getString(1)).forEach { path ->
+                        add(InterruptedWritePath(path = path, batchId = batchId, workspaceUri = workspaceUri))
+                    }
+                }
+            }
+        }
 
     private fun startedWriteRows(selection: String, args: Array<String>): List<SubAgentTaskRecord> =
         readableDatabase.query(
@@ -471,6 +490,7 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
         capabilityHint = getString(SUB_AGENT_TASK_CAPABILITY_HINT).orEmpty(),
         childConversationId = getLong(SUB_AGENT_TASK_CHILD_CONVERSATION_ID),
         status = getString(SUB_AGENT_TASK_STATUS),
+        batchId = getString(SUB_AGENT_TASK_BATCH_ID).orEmpty(),
     )
 
     fun createConversationBranch(
@@ -1752,6 +1772,7 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
             "child_conversation_id",
             "status",
             "user_message_id",
+            "batch_id",
         )
         private const val SUB_AGENT_TASK_INDEX = 0
         private const val SUB_AGENT_TASK_TEXT = 1
@@ -1762,5 +1783,6 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
         private const val SUB_AGENT_TASK_CHILD_CONVERSATION_ID = 6
         private const val SUB_AGENT_TASK_STATUS = 7
         private const val SUB_AGENT_TASK_USER_MESSAGE_ID = 8
+        private const val SUB_AGENT_TASK_BATCH_ID = 9
     }
 }

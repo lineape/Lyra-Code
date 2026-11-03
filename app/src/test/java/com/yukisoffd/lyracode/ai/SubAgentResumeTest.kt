@@ -112,12 +112,12 @@ class SubAgentResumeTest {
             stored = stored,
             requested = requested("edit" to false, writePaths = listOf("src/A.kt")),
             // Both exist: a later write replaced the ordinary backup, while the preserved copy
-            // still holds the state from before the interrupted write.
-            backupPaths = setOf("src/A.kt.bak", "src/A.kt.interrupted.bak"),
+            // of this batch still holds the state from before the interrupted write.
+            backupPaths = setOf("src/A.kt.bak", "src/A.kt.batch6.interrupted.bak"),
         )!!
 
         val interrupted = plan.actions[0] as SubAgentResume.Action.InterruptedWrite
-        assertEquals(listOf("src/A.kt.interrupted.bak", "src/A.kt.bak"), interrupted.backupPaths)
+        assertEquals(listOf("src/A.kt.batch6.interrupted.bak", "src/A.kt.bak"), interrupted.backupPaths)
     }
 
     @Test

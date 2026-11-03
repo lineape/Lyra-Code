@@ -50,12 +50,12 @@ import com.yukisoffd.lyracode.interaction.session.dispatchConversationIdle
 import kotlinx.coroutines.flow.StateFlow
 import android.content.Context
 import com.yukisoffd.lyracode.data.ConversationStore
+import com.yukisoffd.lyracode.data.InterruptedWritePath
 import com.yukisoffd.lyracode.workspace.UploadedFile
 import com.yukisoffd.lyracode.workspace.UploadedFileManager
 import com.yukisoffd.lyracode.workspace.WorkspaceManager
 import com.yukisoffd.lyracode.workspace.WorkspaceFileReference
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.isActive
@@ -408,6 +408,9 @@ class ChatController(
     private val deviceConversationUpdateListener: (Long, ChatUpdate) -> Unit = { conversationId, update ->
         scope.launch {
             if (update.forceReload || update.messageId <= 0L) reloadConversations()
+            // Progress from a conversation the user has switched away from still belongs to the
+            // run that holds the wake lock; the viewer gate below must not hide it.
+            renewRunWakeLock()
             if (activeConversationId.value == conversationId) {
                 status.value = update.status
                 applyChatUpdate(update)
@@ -1463,6 +1466,9 @@ class ChatController(
                 if (activeConversationId.value == conversationId) status.value = text
             },
             onUpdate = { update ->
+                // Re-arm the wake lock before the viewer gate: switching to another conversation
+                // must not stop a background run from renewing the lock it holds.
+                renewRunWakeLock()
                 if (activeConversationId.value == conversationId) {
                     applyChatUpdate(update)
                     status.value = update.status
@@ -1802,6 +1808,8 @@ class ChatController(
             status.value = appContext.getString(R.string.status_continue)
             agent.continueConversation(conversationId, profile, model) {
                 withContext(Dispatchers.Main) {
+                    // Progress renews the wake lock whether or not this conversation is on screen.
+                    renewRunWakeLock()
                     if (activeConversationId.value == conversationId) {
                         applyChatUpdate(it)
                         status.value = it.status
@@ -1839,7 +1847,18 @@ class ChatController(
                 paths.size,
                 paths.joinToString(", ").take(200),
             )
-            pendingInputScope.launch { runCatching { agent.preserveInterruptedBackups(paths) } }
+            pendingInputScope.launch {
+                val workspaceUri = conversationStore.conversation(conversationId)?.workspaceUri.orEmpty()
+                runCatching {
+                    agent.preserveInterruptedBackups(
+                        closedWrites.flatMap { row ->
+                            row.writePaths.map { path ->
+                                InterruptedWritePath(path = path, batchId = row.batchId, workspaceUri = workspaceUri)
+                            }
+                        },
+                    )
+                }
+            }
         }
         reloadMessages()
         reloadConversations()
@@ -1854,6 +1873,8 @@ class ChatController(
             status.value = appContext.getString(R.string.status_regenerate)
             agent.continueConversation(conversationId, profile, model) {
                 withContext(Dispatchers.Main) {
+                    // Progress renews the wake lock whether or not this conversation is on screen.
+                    renewRunWakeLock()
                     if (activeConversationId.value == conversationId) {
                         applyChatUpdate(it)
                         status.value = it.status
@@ -2071,42 +2092,44 @@ class ChatController(
         onOutcome: (ConversationRunOutcome) -> Unit = {},
         block: suspend CoroutineScope.() -> Unit,
     ): Job {
-        val launchedJob = scope.launch(start = CoroutineStart.LAZY) {
-            conversationRunGate.run(conversationId) { block() }
-        }
-        jobs[conversationId] = launchedJob
-        jobOutcomes[conversationId] = onOutcome
-        conversationOperations[conversationId] = operation
         // Paired with [AgentRunForegroundService.start]: a completion that runs before the start
         // (a job cancelled before its first dispatch) must not decrement the process run count.
         var servedRun = false
-        // Completion, not the body's finally: a LAZY job cancelled before its first dispatch
-        // never enters the body, and its outcome and service stop would be lost with it.
-        launchedJob.invokeOnCompletion { cause ->
-            // A cancelled job may finish after a new operation has already started for this
-            // conversation. Only clear our own state. A superseded run also skips its outcome
-            // callback here because the registry entry now belongs to the newer job. Deletion
-            // paths report Cancelled through cancelConversationJob instead.
-            if (jobs[conversationId] === launchedJob) {
-                jobs.remove(conversationId)
-                conversationOperations.remove(conversationId)
-                val outcomeCallback = jobOutcomes.remove(conversationId)
-                val status = runCatching { conversationStore.conversation(conversationId)?.status }.getOrNull()
-                runCatching { outcomeCallback?.invoke(classifyRunOutcome(cause, status)) }
-            }
-            // The foreground service is only a lifetime signal. The service counts runs across
-            // the whole process, because a recreated controller can own a newer run than this
-            // one; only the last run to end may drop the notification.
-            if (servedRun) AgentRunForegroundService.finish(appContext)
-        }
-        // A closed controller's job is already cancelled when it is created, so its completion
-        // has run and the start below would leave a service nothing ever stops.
-        if (launchedJob.isActive && !closed) {
-            servedRun = true
-            AgentRunForegroundService.start(appContext)
-            launchedJob.start()
-        }
-        return launchedJob
+        // The launch itself lives in [launchConversationRun], which a JVM test drives: the start
+        // decision there is the one place a lazy job can be dropped before it ever runs.
+        return scope.launchConversationRun(
+            conversationId = conversationId,
+            gate = conversationRunGate,
+            closed = closed,
+            onLaunched = { launchedJob ->
+                jobs[conversationId] = launchedJob
+                jobOutcomes[conversationId] = onOutcome
+                conversationOperations[conversationId] = operation
+            },
+            // Completion, not the body's finally: a LAZY job cancelled before its first dispatch
+            // never enters the body, and its outcome and service stop would be lost with it.
+            onCompleted = { launchedJob, cause ->
+                // A cancelled job may finish after a new operation has already started for this
+                // conversation. Only clear our own state. A superseded run also skips its outcome
+                // callback here because the registry entry now belongs to the newer job. Deletion
+                // paths report Cancelled through cancelConversationJob instead.
+                if (jobs[conversationId] === launchedJob) {
+                    jobs.remove(conversationId)
+                    conversationOperations.remove(conversationId)
+                    val outcomeCallback = jobOutcomes.remove(conversationId)
+                    val status = runCatching { conversationStore.conversation(conversationId)?.status }.getOrNull()
+                    runCatching { outcomeCallback?.invoke(classifyRunOutcome(cause, status)) }
+                }
+                // The foreground service is only a lifetime signal. The service counts runs across
+                // the whole process, because a recreated controller can own a newer run than this
+                // one; only the last run to end may drop the notification.
+                if (servedRun) AgentRunForegroundService.finish(appContext)
+            },
+            onStarted = {
+                servedRun = true
+                AgentRunForegroundService.start(appContext)
+            },
+        ) { block() }
     }
 
     private fun cancelConversationJob(conversationId: Long) {
@@ -2214,10 +2237,17 @@ class ChatController(
         reloadMessages()
     }
 
+    /**
+     * Every agent update is progress for a run this controller owns, whichever conversation the
+     * user is looking at. The service throttles the acquire, so the call sites put this before
+     * their active-conversation test; [applyChatUpdate] keeps its own call for the paths that
+     * reach it directly.
+     */
+    private fun renewRunWakeLock() = AgentRunForegroundService.renewWakeLock()
+
     private fun applyChatUpdate(update: ChatUpdate) {
-        // Every agent update is progress. Re-arm the wake lock so a long run does not lose it
-        // silently 30 minutes in; the service throttles the actual acquire.
-        AgentRunForegroundService.renewWakeLock()
+        // A long run must not lose the lock silently 30 minutes in.
+        renewRunWakeLock()
         if (update.forceReload) {
             reloadMessages()
             return

@@ -11,7 +11,11 @@ package com.yukisoffd.lyracode.workspace
  *
  * A write task that started in an open sub-agent batch may be interrupted at any point. Its
  * `<path>.bak` is the only copy from before that write, so the batch's recovery path copies it
- * once to `<path>.interrupted.bak`, a name no ordinary write produces.
+ * once to `<path>.<batch>.interrupted.bak`, a name no ordinary write produces.
+ *
+ * The batch is part of the name because the store cannot tell a retry of the same batch from a
+ * second interruption of the same path in a later batch. A batch-named copy is never blocked by
+ * an earlier batch's copy, and a report lists the copy of the batch it is reporting on.
  *
  * The file operations arrive as lambdas so the policy runs in a JVM unit test;
  * [NativeFileManager] supplies the SAF implementation.
@@ -39,13 +43,13 @@ internal class TextBackupStore(
     }
 
     /**
-     * Copies the backup to the never-replaced name, once. Returns true when this call made the
-     * copy; false when there is no backup yet or the copy already exists.
+     * Copies the backup to the batch's never-replaced name, once. Returns true when this call
+     * made the copy; false when there is no backup yet or this batch's copy already exists.
      */
-    fun preserveInterrupted(path: String): Boolean {
+    fun preserveInterrupted(path: String, batchId: String): Boolean {
         if (path.endsWith(BACKUP_SUFFIX, ignoreCase = true)) return false
         val backup = backupPath(path)
-        val preserved = interruptedBackupPath(path)
+        val preserved = interruptedBackupPath(path, batchId)
         if (exists(preserved) || !exists(backup)) return false
         val temporary = temporaryPath(preserved)
         // Complete the copy before the preserved name exists, so a kill cannot freeze a partial
@@ -69,7 +73,15 @@ internal class TextBackupStore(
 
         fun backupPath(path: String): String = "$path$BACKUP_SUFFIX"
 
-        fun interruptedBackupPath(path: String): String = "$path$INTERRUPTED_SUFFIX"
+        fun interruptedBackupPath(path: String, batchId: String): String =
+            "$path.${batchKey(batchId)}$INTERRUPTED_SUFFIX"
+
+        /**
+         * The batch id as a file-name segment. The first eight letters and digits of a UUID are
+         * enough to tell two batches' copies apart, and keep the name readable in the workspace.
+         */
+        private fun batchKey(batchId: String): String =
+            batchId.filter { it.isLetterOrDigit() }.take(8).ifBlank { "0" }
 
         fun temporaryPath(path: String): String = "$path$TEMPORARY_SUFFIX"
     }

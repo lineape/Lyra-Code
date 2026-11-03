@@ -101,7 +101,7 @@ internal object SubAgentResume {
                 task.readOnly -> Action.Run
                 else -> Action.InterruptedWrite(
                     writePaths = row.writePaths,
-                    backupPaths = backupPathsFor(row.writePaths, backupPaths),
+                    backupPaths = backupPathsFor(row.writePaths, backupPaths, batchId),
                 )
             }
         }
@@ -109,12 +109,12 @@ internal object SubAgentResume {
     }
 
     /**
-     * The copies that exist for a write path: the never-replaced copy an interrupted write keeps
-     * first, then the ordinary `.bak`, which every later write replaces.
+     * The copies that exist for a write path in [batchId]: the batch's never-replaced copy an
+     * interrupted write keeps first, then the ordinary `.bak`, which every later write replaces.
      */
-    internal fun backupPathsFor(writePaths: List<String>, existing: Set<String>): List<String> =
+    internal fun backupPathsFor(writePaths: List<String>, existing: Set<String>, batchId: String): List<String> =
         writePaths.flatMap { path ->
-            listOf(TextBackupStore.interruptedBackupPath(path), TextBackupStore.backupPath(path))
+            listOf(TextBackupStore.interruptedBackupPath(path, batchId), TextBackupStore.backupPath(path))
         }.filter { it in existing }
 
     /**

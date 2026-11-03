@@ -25,6 +25,21 @@ data class SubAgentTaskRecord(
     val capabilityHint: String,
     val childConversationId: Long,
     val status: String,
+    /** The batch this row belongs to. The recovery copy of a path is named after it. */
+    val batchId: String = "",
+)
+
+/**
+ * One write path whose task started and may have been interrupted, with the batch that owns it
+ * and the workspace its path is relative to.
+ *
+ * The workspace travels with the path because a controller start has no conversation selected:
+ * resolving every path against the active workspace would copy the wrong files, or none.
+ */
+data class InterruptedWritePath(
+    val path: String,
+    val batchId: String,
+    val workspaceUri: String,
 )
 
 object SubAgentTaskStatus {

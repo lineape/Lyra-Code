@@ -21,6 +21,7 @@ import com.yukisoffd.lyracode.data.messageTokenCosts
 import com.yukisoffd.lyracode.data.McpServerConfig
 import com.yukisoffd.lyracode.data.McpToolDefinition
 import com.yukisoffd.lyracode.data.MediaGenerationKind
+import com.yukisoffd.lyracode.data.InterruptedWritePath
 import com.yukisoffd.lyracode.data.OpenSubAgentBatch
 import com.yukisoffd.lyracode.data.SubAgentConfig
 import com.yukisoffd.lyracode.data.SubAgentTaskRecord
@@ -2587,9 +2588,9 @@ class OpenAiAgent(
     }
 
     /** Keeps each interrupted write's backup under a name that no later write replaces. */
-    fun preserveInterruptedBackups(paths: Collection<String>) {
-        if (paths.isEmpty()) return
-        nativeFileManager.preserveInterruptedBackups(paths)
+    fun preserveInterruptedBackups(writes: Collection<InterruptedWritePath>) {
+        if (writes.isEmpty()) return
+        nativeFileManager.preserveInterruptedBackups(writes)
     }
 
     /**
@@ -2597,7 +2598,7 @@ class OpenAiAgent(
      * later write can replace it. Call from the controller's start, off the main thread.
      */
     fun preserveOpenBatchBackups() {
-        preserveInterruptedBackups(conversationStore.openSubAgentWritePaths())
+        preserveInterruptedBackups(conversationStore.openSubAgentWriteTasks())
     }
 
     /** Started write rows of the replaced batch whose paths this batch writes again. */
@@ -2667,8 +2668,16 @@ class OpenAiAgent(
         val startedWriteRows = openBatch?.tasks.orEmpty()
             .filter { it.childConversationId > 0 && it.writePaths.isNotEmpty() }
         val closedWriteRows = closedInterruptedWrites[parentConversationId].orEmpty()
+        // Each copy is made in the workspace its conversation belongs to, and named after the
+        // batch whose write it preserves: a second interruption of the same path in a later
+        // batch must not find the first batch's copy already there.
+        val parentWorkspaceUri = conversationStore.conversation(parentConversationId)?.workspaceUri.orEmpty()
         nativeFileManager.preserveInterruptedBackups(
-            (startedWriteRows + closedWriteRows).flatMap { it.writePaths },
+            (startedWriteRows + closedWriteRows).flatMap { row ->
+                row.writePaths.map { path ->
+                    InterruptedWritePath(path = path, batchId = row.batchId, workspaceUri = parentWorkspaceUri)
+                }
+            },
         )
         // A reworded batch abandons the open one. Read tasks may safely run again, but a write
         // task that had started may have changed files: refuse this call once and name the paths,
@@ -2769,7 +2778,8 @@ class OpenAiAgent(
                             "before continuing. Every write replaces a path's .bak, so a .bak only proves the " +
                             "state before the latest write and can predate this task. A path whose write was " +
                             "interrupted keeps a copy that later writes never replace at " +
-                            "<path>.interrupted.bak. An empty backup_paths list proves nothing, and " +
+                            "<path>.<batch>.interrupted.bak, where <batch> is the batch named in " +
+                            "backup_paths. An empty backup_paths list proves nothing, and " +
                             "delete_file_or_folder, rename_move and create_folder make no backup.",
                     )
             }
@@ -2784,7 +2794,7 @@ class OpenAiAgent(
                                         .put("index", row.index + 1)
                                         .put("task", row.taskText)
                                         .put("write_paths", JSONArray(row.writePaths))
-                                        .put("backup_paths", JSONArray(existingBackups(row.writePaths)))
+                                        .put("backup_paths", JSONArray(existingBackups(row)))
                                         .put(
                                             "status",
                                             if (row.status == SubAgentTaskStatus.COMPLETED) "completed" else "interrupted",
@@ -2800,8 +2810,8 @@ class OpenAiAgent(
                             "Inspect each write path before writing it again. A task whose status is completed " +
                             "returned its write before the batch was abandoned; a task whose status is " +
                             "interrupted may have stopped anywhere inside its write. Every write replaces a " +
-                            "path's .bak, so read <path>.interrupted.bak when it is listed: later writes never " +
-                            "replace that copy.",
+                            "path's .bak, so read the <path>.<batch>.interrupted.bak listed in backup_paths: " +
+                            "later writes never replace that copy.",
                     )
             }
             // The batch stays open until the tool result row is in the parent's store; see
@@ -2834,7 +2844,10 @@ class OpenAiAgent(
         val backupPaths = batch.tasks
             .flatMap { row ->
                 row.writePaths.flatMap { path ->
-                    listOf(TextBackupStore.backupPath(path), TextBackupStore.interruptedBackupPath(path))
+                    listOf(
+                        TextBackupStore.backupPath(path),
+                        TextBackupStore.interruptedBackupPath(path, batch.batchId),
+                    )
                 }
             }
             .filter { nativeFileManager.exists(it) }
@@ -2901,16 +2914,20 @@ class OpenAiAgent(
                     "It was not re-run because it may have changed files. Inspect every write path and its " +
                     "backup copy before deciding what to do. Every write replaces a path's .bak, so a .bak " +
                     "only proves the state before the latest write. A path whose write was interrupted keeps " +
-                    "a copy that later writes never replace at <path>.interrupted.bak. An empty " +
+                    "a copy that later writes never replace at <path>.<batch>.interrupted.bak, where " +
+                    "<batch> is the batch named in backup_paths. An empty " +
                     "backup_paths list proves nothing.",
             )
     }
 
-    /** The backups that exist right now: interrupted-write copies first, then the ordinary `.bak`. */
-    private fun existingBackups(writePaths: List<String>): List<String> =
-        writePaths
+    /** The backups that exist right now: the batch's interrupted-write copies first, then the ordinary `.bak`. */
+    private fun existingBackups(row: SubAgentTaskRecord): List<String> =
+        row.writePaths
             .flatMap { path ->
-                listOf(TextBackupStore.interruptedBackupPath(path), TextBackupStore.backupPath(path))
+                listOf(
+                    TextBackupStore.interruptedBackupPath(path, row.batchId),
+                    TextBackupStore.backupPath(path),
+                )
             }
             .filter { nativeFileManager.exists(it) }
 

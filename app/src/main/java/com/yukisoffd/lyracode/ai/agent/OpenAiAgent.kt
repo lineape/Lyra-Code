@@ -50,6 +50,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -2630,8 +2633,14 @@ class OpenAiAgent(
         if (!settings.subAgentOrchestrationEnabled) return "ERROR: SUB_AGENT_DISABLED\nSub-agent orchestration is disabled by the user."
         val candidates = settings.enabledSubAgents()
         if (candidates.isEmpty()) return "ERROR: NO_SUB_AGENT_MODELS\nNo enabled sub-agent model is configured. Ask the user to configure one in Settings > Sub-agent orchestration."
-        val tasks = parseSubAgentTasks(args).take(MAX_SUB_AGENT_TASKS)
+        val tasks = parseSubAgentTasks(args)
         if (tasks.isEmpty()) return "ERROR: NO_SUB_AGENT_TASKS\ntasks must contain at least one subtask."
+        val batchSize = SubAgentLimits.evaluateBatchSize(tasks.size, settings.subAgentMaxTasks)
+        if (batchSize is SubAgentLimits.BatchSize.Rejected) {
+            return "ERROR: TOO_MANY_SUB_AGENT_TASKS\n" +
+                "This batch has ${batchSize.requested} tasks but the configured limit is ${batchSize.limit}. " +
+                "Split the work into smaller batches; no task was dropped."
+        }
         tasks.forEachIndexed { index, task ->
             require(!(task.readOnly && task.writePaths.isNotEmpty())) {
                 "Sub-agent task ${index + 1} cannot set read_only=true with non-empty write_paths."
@@ -2734,29 +2743,74 @@ class OpenAiAgent(
                 assignmentCounts[agentConfig.id] = (assignmentCounts[agentConfig.id] ?: 0) + 1
                 agentConfig
             }
+            val maxConcurrency = SubAgentLimits.effectiveConcurrency(settings.subAgentMaxConcurrency, runIndices.size)
+            val progress = SubAgentBatchProgress()
+            val statusMutex = Mutex()
+            suspend fun emit(text: String) = statusMutex.withLock { onStatus(text) }
+            suspend fun emitConcurrentProgress(detail: String? = null) {
+                emit(
+                    if (detail == null) {
+                        context.getString(
+                            R.string.status_sub_agent_progress_concurrent,
+                            progress.completedCount,
+                            tasks.size,
+                            progress.runningCount,
+                        )
+                    } else {
+                        context.getString(
+                            R.string.status_sub_agent_progress_concurrent_detail,
+                            progress.completedCount,
+                            tasks.size,
+                            progress.runningCount,
+                            detail,
+                        )
+                    },
+                )
+            }
             tasks.forEachIndexed { index, task ->
                 currentCoroutineContext().ensureActive()
                 results[index] = when (val action = actions.getValue(index)) {
-                    is SubAgentResume.Action.Reuse -> {
-                        onStatus(context.getString(R.string.status_sub_agent_progress, index + 1, tasks.size))
-                        reusedSubAgentResult(index, task, action.childConversationId)
-                    }
-                    is SubAgentResume.Action.InterruptedWrite -> {
-                        onStatus(context.getString(R.string.status_sub_agent_progress, index + 1, tasks.size))
-                        interruptedSubAgentResult(index, task, assignments[index], action)
-                    }
-                    SubAgentResume.Action.Run -> runSubAgentTask(
+                    is SubAgentResume.Action.Reuse -> reusedSubAgentResult(index, task, action.childConversationId)
+                    is SubAgentResume.Action.InterruptedWrite -> interruptedSubAgentResult(index, task, assignments[index], action)
+                    SubAgentResume.Action.Run -> null
+                }
+                if (results[index] != null) progress.finished(index)
+            }
+            // Resume planning, reservations and durable task state belong to the batch layer.
+            // Only tasks selected to run consume permits; retained results keep their indices.
+            val outcomes = SubAgentBatchRunner(maxConcurrency).run(runIndices.size) { offset ->
+                val index = runIndices[offset]
+                progress.started(index, assignments[index].name)
+                try {
+                    runSubAgentTask(
                         parentConversationId = parentConversationId,
                         batchId = batchId,
                         index = index,
                         tasks = tasks,
                         agentConfig = assignments[index],
                         owner = owners.getValue(index),
-                        onStatus = onStatus,
+                        onStatus = { status ->
+                            if (currentCoroutineContext().isActive) {
+                                if (maxConcurrency > 1) emitConcurrentProgress(status) else emit(status)
+                            }
+                        },
+                    )
+                } finally {
+                    progress.finished(index)
+                    if (currentCoroutineContext().isActive && maxConcurrency > 1) emitConcurrentProgress()
+                }
+            }
+            outcomes.forEachIndexed { offset, outcome ->
+                val index = runIndices[offset]
+                results[index] = when (outcome) {
+                    is SubAgentCallOutcome.Completed -> outcome.value
+                    is SubAgentCallOutcome.Failed -> subAgentError(
+                        index, assignments[index], tasks[index],
+                        outcome.error.message.orEmpty().ifBlank { outcome.error.toString() },
                     )
                 }
             }
-            onStatus(context.getString(R.string.status_sub_agent_progress, tasks.size, tasks.size))
+            emit(context.getString(R.string.status_sub_agent_progress, tasks.size, tasks.size))
             val ordered = JSONArray()
             results.forEachIndexed { index, result ->
                 ordered.put(
@@ -4158,7 +4212,6 @@ class OpenAiAgent(
         private const val DEEPSEEK_ANTHROPIC_FILES_BETA = "files-api-2025-04-14"
         private const val LOG_ARGUMENT_CHARS = 1_000
         private const val MAX_TOOL_RESULT_CHARS = 500_000
-        private const val MAX_SUB_AGENT_TASKS = 6
         private const val MIN_HISTORY_COMPRESSION_CHUNKS = 1
         private const val MAX_HISTORY_COMPRESSION_CHUNKS = 16
         private const val HISTORY_COMPRESSION_MERGE_BATCH_SIZE = 4

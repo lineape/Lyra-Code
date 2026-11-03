@@ -25,15 +25,30 @@ class PendingToolCallReplayTest {
 
     @Test fun preservesPartialGroupAndOrder() {
         val messages = listOf(
-            assistant(Triple("a", "read_file", "{}"), Triple("b", "run_sub_agents", "{broken")),
+            assistant(Triple("a", "read_file", "{}"), Triple("b", "run_sub_agents", "{}")),
             message("tool", toolId = "a"),
         )
         val group = PendingToolCallReplay.plan(messages)!!
         assertEquals(listOf("a", "b"), group.calls.map { it.id })
         assertEquals(setOf("a"), group.answered)
-        assertEquals("{broken", group.calls[1].rawArguments)
+        assertEquals("{}", group.calls[1].rawArguments)
         val afterReplay = PendingToolCallReplay.plan(messages + message("tool", toolId = "b"))!!
         assertEquals(setOf("a", "b"), afterReplay.answered)
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun malformedAssistantCannotHideBehindLocalErrorPrefix() {
+        PendingToolCallReplay.plan(listOf(message("assistant", "{broken", content = "Request interrupted")))
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun malformedArgumentsStopBeforeReplay() {
+        PendingToolCallReplay.plan(listOf(assistant(Triple("a", "run_sub_agents", "{broken"))))
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun malformedToolCallsStopBeforeReplay() {
+        PendingToolCallReplay.plan(listOf(message("assistant", "{\"tool_calls\":{}}")))
     }
 
     @Test fun ignoresEmptyPlaceholderButStopsAtNewUserTurn() {

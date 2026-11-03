@@ -16,7 +16,8 @@ internal object PendingToolCallReplay {
         val raw = try { JSONObject(saved) } catch (error: Exception) {
             throw IllegalStateException("Malformed saved assistant message; Continue stopped before replay", error)
         }
-        val array = raw.optJSONArray("tool_calls") ?: return null
+        if (!raw.has("tool_calls") || raw.isNull("tool_calls")) return null
+        val array = raw.optJSONArray("tool_calls") ?: error("Malformed saved tool calls")
         val calls = mutableListOf<ToolCall>()
         for (i in 0 until array.length()) {
             val item = array.optJSONObject(i) ?: error("Malformed saved tool call")
@@ -25,7 +26,9 @@ internal object PendingToolCallReplay {
             val name = fn.optString("name")
             require(id.isNotBlank() && name.isNotBlank() && calls.none { it.id == id }) { "Malformed or duplicate saved tool call id" }
             val arguments = fn.optString("arguments")
-            val parsed = try { JSONObject(arguments) } catch (_: Exception) { JSONObject() }
+            val parsed = try { JSONObject(arguments) } catch (error: Exception) {
+                throw IllegalStateException("Malformed saved tool arguments; Continue stopped before replay", error)
+            }
             calls.add(ToolCall(id, name, parsed, arguments))
         }
         if (calls.isEmpty()) return null

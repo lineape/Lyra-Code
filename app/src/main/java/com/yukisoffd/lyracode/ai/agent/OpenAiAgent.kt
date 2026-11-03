@@ -624,7 +624,7 @@ class OpenAiAgent(
         val messages = contextHistory(conversationId, -1L)
         val group = PendingToolCallReplay.plan(messages) ?: return
         val batch = conversationStore.openSubAgentBatch(conversationId)
-        // The stored batch has no tool-call id. Only a unique task match can identify its call.
+        // Match the originating call as well as the saved task and user-turn identity.
         val matches = if (batch == null || batch.toolCallId.isBlank()) emptyList() else group.calls.filter { it.id == batch.toolCallId && replayBatchMatches(conversationId, batch, it) }
         val matched = PendingToolCallReplay.uniqueUnansweredMatch(matches, group.answered)
         val deliveredMatch = matches.singleOrNull()?.takeIf { it.id in group.answered }
@@ -672,6 +672,10 @@ class OpenAiAgent(
         onStatus: suspend (String) -> Unit,
     ): String {
         pendingSubAgentBatchCloses.remove(conversationId)
+        if (settings.purePromptMode) {
+            return ToolExecution("ERROR: TOOLS_UNAVAILABLE_IN_PURE_MODE", ok = false)
+                .toToolOutputJson(call.name, ok = false)
+        }
         if (call.name in settings.disabledTools()) {
             return ToolExecution("ERROR: TOOL_DISABLED\n${call.name} is disabled by the user.", ok = false)
                 .toToolOutputJson(call.name, ok = false)
@@ -859,8 +863,11 @@ class OpenAiAgent(
                 .put("content", finalError)
                 .put(LOCAL_REQUEST_ERROR_KEY, true)
                 .toString()
+            val savedToolCalls = failedMessage?.rawJson?.let { raw ->
+                runCatching { JSONObject(raw).optJSONArray("tool_calls")?.length()?.let { it > 0 } == true }.getOrDefault(false)
+            } == true
             val errorMessageId = when {
-                failedMessage == null -> conversationStore.addMessage(
+                savedToolCalls || failedMessage == null -> conversationStore.addMessage(
                     conversationId,
                     "assistant",
                     finalError,
@@ -4472,7 +4479,7 @@ internal fun ChatMessage.isLocalRequestErrorMessage(): Boolean {
     if (role != "assistant") return false
     val raw = rawJson?.takeIf { it.isNotBlank() }?.let { runCatching { JSONObject(it) }.getOrNull() }
     if (raw?.optBoolean(LOCAL_REQUEST_ERROR_KEY, false) == true) return true
-    if (raw != null) return false
+    if (!rawJson.isNullOrBlank()) return false
     val normalized = content.trimStart()
     return normalized.startsWith("Request interrupted") ||
         normalized.startsWith("请求中断：") ||

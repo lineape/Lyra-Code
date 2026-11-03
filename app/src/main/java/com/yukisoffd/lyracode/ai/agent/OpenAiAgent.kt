@@ -2747,25 +2747,27 @@ class OpenAiAgent(
             val progress = SubAgentBatchProgress()
             val statusMutex = Mutex()
             suspend fun emit(text: String) = statusMutex.withLock { onStatus(text) }
-            suspend fun emitConcurrentProgress(detail: String? = null) {
-                emit(
-                    if (detail == null) {
-                        context.getString(
-                            R.string.status_sub_agent_progress_concurrent,
-                            progress.completedCount,
-                            tasks.size,
-                            progress.runningCount,
-                        )
-                    } else {
-                        context.getString(
-                            R.string.status_sub_agent_progress_concurrent_detail,
-                            progress.completedCount,
-                            tasks.size,
-                            progress.runningCount,
-                            detail,
-                        )
-                    },
-                )
+            val statusFormatter = SubAgentProgressFormatter(
+                sequential = { completed, total, agent ->
+                    context.getString(R.string.status_sub_agent_progress_running, completed, total, agent)
+                },
+                sequentialDetail = { completed, total, agent, detail ->
+                    context.getString(R.string.status_sub_agent_progress_detail, completed, total, agent, detail)
+                },
+                concurrent = { completed, total, running ->
+                    context.getString(R.string.status_sub_agent_progress_concurrent, completed, total, running)
+                },
+                concurrentDetail = { completed, total, running, detail ->
+                    context.getString(R.string.status_sub_agent_progress_concurrent_detail, completed, total, running, detail)
+                },
+            )
+            suspend fun emitProgress() {
+                emit(context.getString(
+                    R.string.status_sub_agent_progress_concurrent,
+                    progress.completedCount,
+                    tasks.size,
+                    progress.runningCount,
+                ))
             }
             tasks.forEachIndexed { index, task ->
                 currentCoroutineContext().ensureActive()
@@ -2791,13 +2793,23 @@ class OpenAiAgent(
                         owner = owners.getValue(index),
                         onStatus = { status ->
                             if (currentCoroutineContext().isActive) {
-                                if (maxConcurrency > 1) emitConcurrentProgress(status) else emit(status)
+                                emit(statusFormatter.format(
+                                    maxConcurrency = maxConcurrency,
+                                    completed = progress.completedCount,
+                                    total = tasks.size,
+                                    running = progress.runningCount,
+                                    agentName = assignments[index].name,
+                                    detail = status,
+                                ))
                             }
                         },
                     )
                 } finally {
                     progress.finished(index)
-                    if (currentCoroutineContext().isActive && maxConcurrency > 1) emitConcurrentProgress()
+                    if (currentCoroutineContext().isActive) {
+                        if (maxConcurrency > 1) emitProgress()
+                        else emit(context.getString(R.string.status_sub_agent_progress, progress.completedCount, tasks.size))
+                    }
                 }
             }
             outcomes.forEachIndexed { offset, outcome ->
@@ -3008,18 +3020,10 @@ class OpenAiAgent(
         onStatus: suspend (String) -> Unit,
     ): JSONObject {
         val task = tasks[index]
-        onStatus(
-            context.getString(
-                R.string.status_sub_agent_progress_running,
-                index,
-                tasks.size,
-                agentConfig.name,
-            ),
-        )
+        onStatus("")
         val profile = settings.profiles().firstOrNull { it.id == agentConfig.profileId }
         if (profile == null) {
             conversationStore.setSubAgentTaskStatus(parentConversationId, batchId, index, SubAgentTaskStatus.FAILED)
-            onStatus(context.getString(R.string.status_sub_agent_progress, index + 1, tasks.size))
             return subAgentError(index, agentConfig, task, "Model profile does not exist: ${agentConfig.profileId}")
         }
         val model = agentConfig.model.ifBlank { profile.selectedModel }
@@ -3054,15 +3058,7 @@ class OpenAiAgent(
                 model,
                 onUpdate = { update ->
                     if (update.status.isNotBlank()) {
-                        onStatus(
-                            context.getString(
-                                R.string.status_sub_agent_progress_detail,
-                                index,
-                                tasks.size,
-                                agentConfig.name,
-                                update.status,
-                            ),
-                        )
+                        onStatus(update.status)
                     }
                 },
                 propagateErrors = false,
@@ -3094,7 +3090,6 @@ class OpenAiAgent(
         } finally {
             subAgentContexts.remove(childConversationId)
             conversationStore.setSubAgentTaskStatus(parentConversationId, batchId, index, persistedStatus)
-            onStatus(context.getString(R.string.status_sub_agent_progress, index + 1, tasks.size))
         }
     }
 

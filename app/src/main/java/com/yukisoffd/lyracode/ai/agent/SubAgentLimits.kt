@@ -49,6 +49,12 @@ internal object SubAgentLimits {
         return if (requested <= limit) BatchSize.Accepted(requested) else BatchSize.Rejected(requested, limit)
     }
 
+    fun requireAllTasksParsed(requested: Int, parsed: Int) {
+        require(requested == parsed) {
+            "INVALID_SUB_AGENT_TASKS: Every tasks entry must contain a non-blank task; no task ran."
+        }
+    }
+
     /** Writes the two limits into a settings export. */
     fun writeExport(root: JSONObject, maxTasks: Int, maxConcurrency: Int) {
         root.put(KEY_MAX_TASKS, normalizeTaskLimit(maxTasks))

@@ -2633,14 +2633,16 @@ class OpenAiAgent(
         if (!settings.subAgentOrchestrationEnabled) return "ERROR: SUB_AGENT_DISABLED\nSub-agent orchestration is disabled by the user."
         val candidates = settings.enabledSubAgents()
         if (candidates.isEmpty()) return "ERROR: NO_SUB_AGENT_MODELS\nNo enabled sub-agent model is configured. Ask the user to configure one in Settings > Sub-agent orchestration."
-        val tasks = parseSubAgentTasks(args)
-        if (tasks.isEmpty()) return "ERROR: NO_SUB_AGENT_TASKS\ntasks must contain at least one subtask."
-        val batchSize = SubAgentLimits.evaluateBatchSize(tasks.size, settings.subAgentMaxTasks)
+        val requestedCount = args.optJSONArray("tasks")?.length() ?: 0
+        if (requestedCount == 0) return "ERROR: NO_SUB_AGENT_TASKS\ntasks must contain at least one subtask."
+        val batchSize = SubAgentLimits.evaluateBatchSize(requestedCount, settings.subAgentMaxTasks)
         if (batchSize is SubAgentLimits.BatchSize.Rejected) {
             return "ERROR: TOO_MANY_SUB_AGENT_TASKS\n" +
                 "This batch has ${batchSize.requested} tasks but the configured limit is ${batchSize.limit}. " +
                 "Split the work into smaller batches; no task was dropped."
         }
+        val tasks = parseSubAgentTasks(args)
+        SubAgentLimits.requireAllTasksParsed(requestedCount, tasks.size)
         tasks.forEachIndexed { index, task ->
             require(!(task.readOnly && task.writePaths.isNotEmpty())) {
                 "Sub-agent task ${index + 1} cannot set read_only=true with non-empty write_paths."

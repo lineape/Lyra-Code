@@ -46,6 +46,17 @@ class SubAgentLimitsTest {
         assertTrue(size is SubAgentLimits.BatchSize.Rejected)
     }
 
+    @Test(expected = IllegalArgumentException::class)
+    fun `invalid entries cannot silently shrink a requested batch`() {
+        SubAgentLimits.requireAllTasksParsed(requested = 7, parsed = 6)
+    }
+
+    @Test
+    fun `raw request size is rejected even when parsed tasks would fit`() {
+        assertEquals(SubAgentLimits.BatchSize.Rejected(7, 6), SubAgentLimits.evaluateBatchSize(7, 6))
+        SubAgentLimits.requireAllTasksParsed(requested = 6, parsed = 6)
+    }
+
     @Test
     fun `limits survive an export and import round trip`() {
         val exported = JSONObject()

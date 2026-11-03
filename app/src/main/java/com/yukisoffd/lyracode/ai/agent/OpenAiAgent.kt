@@ -2897,7 +2897,7 @@ class OpenAiAgent(
             }
             // Resume planning, reservations and durable task state belong to the batch layer.
             // Only tasks selected to run consume permits; retained results keep their indices.
-            val outcomes = SubAgentBatchRunner(maxConcurrency).run(runIndices.size) { offset ->
+            val outcomes = SubAgentBatchRunner(maxConcurrency, Dispatchers.IO).run(runIndices.size) { offset ->
                 val index = runIndices[offset]
                 progress.started(index, assignments[index].name)
                 try {

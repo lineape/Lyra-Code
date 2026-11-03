@@ -18,6 +18,7 @@ class SubAgentTaskSchemaTest {
             "read_only",
             "expected_output",
             "capability_hint",
+            "preferred_agent",
             "user_message_id",
             "status",
             "delivered",
@@ -27,8 +28,16 @@ class SubAgentTaskSchemaTest {
             assertTrue("missing column $column", ddl.contains(column))
         }
         assertTrue(ddl.contains("PRIMARY KEY (parent_conversation_id, batch_id, task_index)"))
-        assertEquals(14, SubAgentTaskSchema.DATABASE_VERSION)
+        assertEquals(15, SubAgentTaskSchema.DATABASE_VERSION)
         assertTrue(SubAgentTaskSchema.CREATE_INDEX.contains("idx_sub_agent_tasks_open"))
+    }
+
+    @Test
+    fun `the version 14 upgrade marks old agent selection unknown`() {
+        assertEquals(
+            "ALTER TABLE sub_agent_tasks ADD COLUMN preferred_agent TEXT NOT NULL DEFAULT '__lyra_unknown_preferred_agent__'",
+            SubAgentTaskSchema.UPGRADE_14_TO_15,
+        )
     }
 
     @Test

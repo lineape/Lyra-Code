@@ -2,7 +2,9 @@ package com.yukisoffd.lyracode.ai
 
 import com.yukisoffd.lyracode.data.ConversationStore
 import com.yukisoffd.lyracode.data.SubAgentTaskRecord
+import com.yukisoffd.lyracode.data.SubAgentTaskSchema
 import com.yukisoffd.lyracode.workspace.TextBackupStore
+import java.util.Locale
 
 /**
  * Decides what a `run_sub_agents` call does when its parent conversation has an undelivered
@@ -21,6 +23,7 @@ internal object SubAgentResume {
         val writePaths: List<String> = emptyList(),
         val expectedOutput: String = "",
         val capabilityHint: String = "",
+        val preferredAgent: String = "",
     )
 
     sealed interface Action {
@@ -122,11 +125,13 @@ internal object SubAgentResume {
      * flag, write paths, expected output or capability hint is a different task.
      */
     private fun sameTask(row: SubAgentTaskRecord, request: RequestedTask): Boolean =
-        row.taskText.trim() == request.text.trim() &&
+        row.preferredAgent != SubAgentTaskSchema.UNKNOWN_PREFERRED_AGENT &&
+            row.taskText.trim() == request.text.trim() &&
             row.readOnly == request.readOnly &&
             row.writePaths.map(::normalizePath).sorted() == request.writePaths.map(::normalizePath).sorted() &&
             row.expectedOutput.trim() == request.expectedOutput.trim() &&
-            row.capabilityHint.trim() == request.capabilityHint.trim()
+            row.capabilityHint.trim() == request.capabilityHint.trim() &&
+            row.preferredAgent.trim().lowercase(Locale.US) == request.preferredAgent.trim().lowercase(Locale.US)
 
     private fun normalizePath(path: String): String = path.trim().trimStart('/')
 }

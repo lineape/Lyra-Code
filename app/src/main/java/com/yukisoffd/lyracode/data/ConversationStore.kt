@@ -261,6 +261,7 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
         // version 13 needs the ALTERs.
         if (oldVersion < 13) createSubAgentTaskTable(db)
         if (oldVersion in 13 until 14) SubAgentTaskSchema.UPGRADE_13_TO_14.forEach(db::execSQL)
+        if (oldVersion in 13 until 15) db.execSQL(SubAgentTaskSchema.UPGRADE_14_TO_15)
     }
 
     fun createConversation(
@@ -319,6 +320,7 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
                         put("read_only", if (task.readOnly) 1 else 0)
                         put("expected_output", task.expectedOutput)
                         put("capability_hint", task.capabilityHint)
+                        put("preferred_agent", task.preferredAgent)
                         put("user_message_id", userMessageId)
                         put("status", SubAgentTaskStatus.PENDING)
                         put("delivered", 0)
@@ -491,6 +493,7 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
         childConversationId = getLong(SUB_AGENT_TASK_CHILD_CONVERSATION_ID),
         status = getString(SUB_AGENT_TASK_STATUS),
         batchId = getString(SUB_AGENT_TASK_BATCH_ID).orEmpty(),
+        preferredAgent = getString(SUB_AGENT_TASK_PREFERRED_AGENT).orEmpty(),
     )
 
     fun createConversationBranch(
@@ -1773,6 +1776,7 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
             "status",
             "user_message_id",
             "batch_id",
+            "preferred_agent",
         )
         private const val SUB_AGENT_TASK_INDEX = 0
         private const val SUB_AGENT_TASK_TEXT = 1
@@ -1784,5 +1788,6 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
         private const val SUB_AGENT_TASK_STATUS = 7
         private const val SUB_AGENT_TASK_USER_MESSAGE_ID = 8
         private const val SUB_AGENT_TASK_BATCH_ID = 9
+        private const val SUB_AGENT_TASK_PREFERRED_AGENT = 10
     }
 }

@@ -30,7 +30,10 @@ class NativeFileManager(
         exists = { path -> resolve(path, root())?.isFile == true },
         copy = { source, target -> copyTextFile(source, target, root()) },
         remove = { path -> resolve(path, root())?.delete() == true },
-        rename = { path, newName -> resolve(path, root())?.renameTo(newName) == true },
+        rename = { path, newName ->
+            val document = resolve(path, root())
+            document != null && document.renameTo(newName) && document.name == newName
+        },
     )
 
     fun hasWorkspaceRoot(): Boolean = workspaceManager.rootUri() != null
@@ -227,11 +230,19 @@ class NativeFileManager(
      */
     fun preserveInterruptedBackups(writes: Collection<InterruptedWritePath>): List<String> {
         val clean = cleanWorkspacePaths(writes)
+        val failures = mutableListOf<Throwable>()
         clean.forEach { write ->
-            // Resolve once: every SAF lookup of the root is a content-resolver query.
-            val root = workspaceManager.rootOf(write.workspaceUri)
-            val backups = textBackupsAt { root }
-            runCatching { backups.preserveInterrupted(write.path, write.batchId) }
+            // Attempt every workspace even when an unrelated provider fails.
+            runCatching {
+                val root = workspaceManager.rootOf(write.workspaceUri)
+                val backups = textBackupsAt { root }
+                backups.preserveInterrupted(write.path, write.batchId)
+            }.onFailure { failures += it }
+        }
+        if (failures.isNotEmpty()) {
+            throw IllegalStateException("Interrupted backup preservation failed", failures.first()).apply {
+                failures.drop(1).forEach(::addSuppressed)
+            }
         }
         return existingInterruptedBackups(clean)
     }

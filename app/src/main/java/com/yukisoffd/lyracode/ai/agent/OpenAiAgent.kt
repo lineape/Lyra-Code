@@ -2652,6 +2652,7 @@ class OpenAiAgent(
                 writePaths = normalizedWritePaths[index],
                 expectedOutput = task.expectedOutput,
                 capabilityHint = task.capabilityHint,
+                preferredAgent = task.preferredAgent,
             )
         }
         // A batch answers the turn that opened it. A new user message changes the id, so an old
@@ -2660,8 +2661,6 @@ class OpenAiAgent(
         // A batch that never delivered a result to this parent can be resumed when the model
         // asks for the same tasks again. Anything else abandons the stale rows.
         val openBatch = conversationStore.openSubAgentBatch(parentConversationId)
-        val plan = openBatch?.let { buildSubAgentResumePlan(it, requested, userMessageId) }
-        val batchId = plan?.batchId ?: UUID.randomUUID().toString()
         // A write task that started in a batch this call replaces, or that an edit closed, may
         // have changed files. Its `.bak` is the only copy from before that write, and every later
         // write replaces it, so copy it to the never-replaced name before anything else runs.
@@ -2679,6 +2678,8 @@ class OpenAiAgent(
                 }
             },
         )
+        val plan = openBatch?.let { buildSubAgentResumePlan(it, requested, userMessageId) }
+        val batchId = plan?.batchId ?: UUID.randomUUID().toString()
         // A reworded batch abandons the open one. Read tasks may safely run again, but a write
         // task that had started may have changed files: refuse this call once and name the paths,
         // so the model inspects them before the abandoning call runs the new children.
@@ -2706,6 +2707,7 @@ class OpenAiAgent(
                         task.readOnly,
                         task.expectedOutput,
                         task.capabilityHint,
+                        task.preferredAgent,
                     )
                 },
             )
@@ -2737,7 +2739,7 @@ class OpenAiAgent(
                 results[index] = when (val action = actions.getValue(index)) {
                     is SubAgentResume.Action.Reuse -> {
                         onStatus(context.getString(R.string.status_sub_agent_progress, index + 1, tasks.size))
-                        reusedSubAgentResult(index, task, assignments[index], action.childConversationId)
+                        reusedSubAgentResult(index, task, action.childConversationId)
                     }
                     is SubAgentResume.Action.InterruptedWrite -> {
                         onStatus(context.getString(R.string.status_sub_agent_progress, index + 1, tasks.size))
@@ -2873,14 +2875,13 @@ class OpenAiAgent(
     private fun reusedSubAgentResult(
         index: Int,
         task: SubAgentTask,
-        agentConfig: SubAgentConfig,
         childConversationId: Long,
     ): JSONObject {
         val conversation = conversationStore.conversation(childConversationId)
         val assistant = conversationStore.messages(childConversationId).lastOrNull { it.role == "assistant" }
         return JSONObject()
             .put("index", index + 1)
-            .put("agent", agentConfig.name)
+            .put("agent", "unknown")
             .put("profile_id", conversation?.profileId.orEmpty())
             .put("model", conversation?.model.orEmpty())
             .put("task", task.task)

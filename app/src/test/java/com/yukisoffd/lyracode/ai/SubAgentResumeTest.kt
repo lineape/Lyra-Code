@@ -2,12 +2,48 @@ package com.yukisoffd.lyracode.ai
 
 import com.yukisoffd.lyracode.data.SubAgentTaskRecord
 import com.yukisoffd.lyracode.data.SubAgentTaskStatus
+import com.yukisoffd.lyracode.data.SubAgentTaskSchema
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SubAgentResumeTest {
+    @Test
+    fun `a completed task is reused only for the same explicit agent`() {
+        val stored = listOf(row(0, "research", child = 300, status = SubAgentTaskStatus.COMPLETED).copy(preferredAgent = "agent-a"))
+        fun plan(agent: String) = SubAgentResume.plan(
+            batchId = "batch-agent",
+            storedUserMessageId = 1,
+            currentUserMessageId = 1,
+            stored = stored,
+            requested = listOf(SubAgentResume.RequestedTask(0, "research", true, preferredAgent = agent)),
+            reusableChildIds = setOf(300),
+        )
+
+        assertEquals(SubAgentResume.Action.Reuse(300), plan("agent-a")?.actions?.get(0))
+        // The selector also trims and lowercases the requested agent using Locale.US.
+        assertEquals(SubAgentResume.Action.Reuse(300), plan(" AGENT-A ")?.actions?.get(0))
+        assertNull(plan("agent-b"))
+        assertNull(plan(""))
+    }
+
+    @Test
+    fun `migrated unknown selection never reuses even for an automatic request`() {
+        val stored = listOf(row(0, "research", child = 300, status = SubAgentTaskStatus.COMPLETED)
+            .copy(preferredAgent = SubAgentTaskSchema.UNKNOWN_PREFERRED_AGENT))
+        for (agent in listOf("", "agent-a", SubAgentTaskSchema.UNKNOWN_PREFERRED_AGENT)) {
+            assertNull(SubAgentResume.plan(
+                batchId = "old-batch",
+                storedUserMessageId = 1,
+                currentUserMessageId = 1,
+                stored = stored,
+                requested = listOf(SubAgentResume.RequestedTask(0, "research", true, preferredAgent = agent)),
+                reusableChildIds = setOf(300),
+            ))
+        }
+    }
+
     @Test
     fun `a batch interrupted after task k reuses the finished tasks and runs the rest`() {
         val stored = listOf(

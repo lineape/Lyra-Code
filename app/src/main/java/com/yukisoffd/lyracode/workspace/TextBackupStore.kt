@@ -5,9 +5,13 @@ package com.yukisoffd.lyracode.workspace
  * can never replace.
  *
  * An ordinary write replaces `<path>.bak` with the file's current content, so the backup always
- * holds the state before the latest write. The replacement copies to a temporary name first and
- * renames it over the old backup, so a kill during the copy cannot leave a truncated backup that
- * a later report would treat as good.
+ * holds the state before the latest write. Copies go to a temporary name before publication;
+ * temporary copies are never treated as backups.
+ *
+ * This requires a provider whose rename publishes the complete file at exactly the requested
+ * name, without exposing partial content, and whose failed rename leaves the old destination
+ * intact and creates no destination when absent. SAF does not guarantee atomic rename. Providers
+ * that cannot replace an existing destination must fail the write rather than delete the backup.
  *
  * A write task that started in an open sub-agent batch may be interrupted at any point. Its
  * `<path>.bak` is the only copy from before that write, so the batch's recovery path copies it
@@ -32,14 +36,10 @@ internal class TextBackupStore(
         if (!exists(path)) return
         val backup = backupPath(path)
         val temporary = temporaryPath(backup)
-        // A kill here leaves the old backup intact; the truncated temporary is not a backup.
         copy(path, temporary)
-        if (exists(backup) && !remove(backup)) throw IllegalStateException("无法替换备份: $backup")
-        if (rename(temporary, backup.substringAfterLast('/'))) return
-        // Some providers do not implement rename. The temporary is complete, so copying it over
-        // the old name still replaces the backup; only a kill inside this fallback can truncate it.
-        copy(temporary, backup)
-        remove(temporary)
+        if (!rename(temporary, backup.substringAfterLast('/'))) {
+            throw IllegalStateException("无法发布备份: $backup")
+        }
     }
 
     /**
@@ -60,8 +60,7 @@ internal class TextBackupStore(
             return false
         }
         if (!rename(temporary, preserved.substringAfterLast('/'))) {
-            copy(temporary, preserved)
-            remove(temporary)
+            throw IllegalStateException("无法发布中断备份: $preserved")
         }
         return true
     }

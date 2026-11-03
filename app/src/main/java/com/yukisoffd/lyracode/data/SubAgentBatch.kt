@@ -8,6 +8,7 @@ data class SubAgentTaskSeed(
     val readOnly: Boolean,
     val expectedOutput: String,
     val capabilityHint: String,
+    val preferredAgent: String = "",
 )
 
 /**
@@ -27,6 +28,7 @@ data class SubAgentTaskRecord(
     val status: String,
     /** The batch this row belongs to. The recovery copy of a path is named after it. */
     val batchId: String = "",
+    val preferredAgent: String = "",
 )
 
 /**
@@ -73,7 +75,7 @@ data class OpenSubAgentBatch(
  * a device only: the repo has no Robolectric, and Android's SQLite is unavailable on the JVM.
  */
 internal object SubAgentTaskSchema {
-    const val DATABASE_VERSION = 14
+    const val DATABASE_VERSION = 15
 
     const val CREATE_TABLE = """
         CREATE TABLE IF NOT EXISTS sub_agent_tasks (
@@ -86,6 +88,7 @@ internal object SubAgentTaskSchema {
             read_only INTEGER NOT NULL DEFAULT 0,
             expected_output TEXT NOT NULL DEFAULT '',
             capability_hint TEXT NOT NULL DEFAULT '',
+            preferred_agent TEXT NOT NULL DEFAULT '',
             user_message_id INTEGER NOT NULL DEFAULT 0,
             status TEXT NOT NULL,
             delivered INTEGER NOT NULL DEFAULT 0,
@@ -97,6 +100,11 @@ internal object SubAgentTaskSchema {
 
     const val CREATE_INDEX =
         "CREATE INDEX IF NOT EXISTS idx_sub_agent_tasks_open ON sub_agent_tasks(parent_conversation_id, delivered)"
+
+    const val UNKNOWN_PREFERRED_AGENT = "__lyra_unknown_preferred_agent__"
+
+    const val UPGRADE_14_TO_15 =
+        "ALTER TABLE sub_agent_tasks ADD COLUMN preferred_agent TEXT NOT NULL DEFAULT '__lyra_unknown_preferred_agent__'"
 
     /** Carries the version-13 table to the identity columns the resume match needs. */
     val UPGRADE_13_TO_14 = listOf(

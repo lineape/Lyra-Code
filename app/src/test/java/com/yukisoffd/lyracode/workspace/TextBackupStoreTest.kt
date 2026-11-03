@@ -14,12 +14,16 @@ class TextBackupStoreTest {
     private class FakeWorkspace {
         val content = linkedMapOf<String, String>()
         var killOnNextCopy = false
+        var renameSupported = true
+        var replaceSupported = true
+        var failRenameFrom: String? = null
+        var killOnCopyTo: String? = null
 
         fun store(): TextBackupStore = TextBackupStore(
             exists = { path -> path in content },
             copy = { source, target ->
                 val moving = content[source] ?: throw NoSuchElementException(source)
-                if (killOnNextCopy) {
+                if (killOnNextCopy || target == killOnCopyTo) {
                     killOnNextCopy = false
                     content[target] = moving.take(1)
                     throw SimulatedKill()
@@ -28,9 +32,12 @@ class TextBackupStoreTest {
             },
             remove = { path -> content.remove(path) != null },
             rename = { path, newName ->
-                val moved = content.remove(path) ?: return@TextBackupStore false
+                if (!renameSupported || path == failRenameFrom) return@TextBackupStore false
                 val directory = path.substringBeforeLast('/', missingDelimiterValue = "")
-                content[if (directory.isEmpty()) newName else "$directory/$newName"] = moved
+                val target = if (directory.isEmpty()) newName else "$directory/$newName"
+                if (!replaceSupported && target in content) return@TextBackupStore false
+                val moved = content.remove(path) ?: return@TextBackupStore false
+                content[target] = moved
                 true
             },
         )
@@ -149,6 +156,90 @@ class TextBackupStoreTest {
 
         assertEquals("v1", files.content["notes.md.firstbat.interrupted.bak"])
         assertEquals("v4-good", files.content["notes.md.secondba.interrupted.bak"])
+    }
+
+    @Test
+    fun `unsupported rename retains the previous backup`() {
+        val files = FakeWorkspace()
+        files.content["notes.md"] = "current"
+        files.content["notes.md.bak"] = "previous"
+        files.renameSupported = false
+
+        try {
+            files.store().replaceBackup("notes.md")
+            fail("publication must fail")
+        } catch (expected: IllegalStateException) {
+            // The caller must not overwrite the original.
+        }
+        assertEquals("previous", files.content["notes.md.bak"])
+        assertEquals("current", files.content["notes.md"])
+    }
+
+    @Test
+    fun `failed publication leaves the previous backup and permits retry`() {
+        val files = FakeWorkspace()
+        files.content["notes.md"] = "current"
+        files.content["notes.md.bak"] = "previous"
+        files.failRenameFrom = "notes.md.bak.tmp"
+
+        try {
+            files.store().replaceBackup("notes.md")
+            fail("publication must fail")
+        } catch (expected: IllegalStateException) {
+            // expected
+        }
+        assertEquals("previous", files.content["notes.md.bak"])
+        files.failRenameFrom = null
+        files.store().replaceBackup("notes.md")
+        assertEquals("current", files.content["notes.md.bak"])
+    }
+
+    @Test
+    fun `unsupported replacement leaves backup and similarly named user file intact`() {
+        val files = FakeWorkspace()
+        files.content["notes.md"] = "current"
+        files.content["notes.md.bak"] = "previous"
+        files.content["notes.md.bak.previous"] = "user file"
+        files.replaceSupported = false
+
+        try {
+            files.store().replaceBackup("notes.md")
+            fail("publication must fail")
+        } catch (expected: IllegalStateException) {
+            // expected
+        }
+        assertEquals("previous", files.content["notes.md.bak"])
+        assertEquals("user file", files.content["notes.md.bak.previous"])
+        assertEquals("current", files.content["notes.md"])
+    }
+
+    @Test
+    fun `a partial temporary without a backup is never preserved`() {
+        val files = FakeWorkspace()
+        files.content["notes.md.bak.tmp"] = "partial"
+
+        assertFalse(files.store().preserveInterrupted("notes.md", "batch-1"))
+        assertNull(files.content["notes.md.batch1.interrupted.bak"])
+    }
+
+    @Test
+    fun `unsupported rename cannot publish a partial preserved copy`() {
+        val files = FakeWorkspace()
+        files.content["notes.md.bak"] = "original"
+        files.renameSupported = false
+        files.killOnCopyTo = "notes.md.batch1.interrupted.bak"
+
+        try {
+            files.store().preserveInterrupted("notes.md", "batch-1")
+            fail("publication must fail")
+        } catch (expected: RuntimeException) {
+            // No final copy may be trusted after the failure.
+        }
+
+        assertNull(files.content["notes.md.batch1.interrupted.bak"])
+        assertEquals("original", files.content["notes.md.bak"])
+        files.renameSupported = true
+        assertTrue(files.store().preserveInterrupted("notes.md", "batch-1"))
     }
 
     @Test

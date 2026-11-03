@@ -2086,6 +2086,10 @@ class ChatController(
         todoItems.addAll(todoByConversation[activeConversationId.value].orEmpty())
     }
 
+    @androidx.annotation.VisibleForTesting
+    internal fun launchTestConversationJob(conversationId: Long, block: suspend CoroutineScope.() -> Unit): Job =
+        launchConversationJob(conversationId, ConversationOperation.GENERATING, block = block)
+
     private fun launchConversationJob(
         conversationId: Long,
         operation: ConversationOperation,

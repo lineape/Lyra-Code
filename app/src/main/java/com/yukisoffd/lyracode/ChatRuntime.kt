@@ -1,6 +1,8 @@
 package com.yukisoffd.lyracode
 
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.res.Resources
 import android.os.Looper
 import com.yukisoffd.lyracode.ai.AiResponseCache
 import com.yukisoffd.lyracode.ai.OpenAiAgent
@@ -38,8 +40,12 @@ internal class ProcessRuntimeOwner<R : Any, T : Any> {
 }
 
 internal class ChatRuntime private constructor(context: Context) {
-    private val appContext = context.applicationContext
-    val settings = AppSettings(appContext)
+    private val application = context.applicationContext
+    private val appContext = object : ContextWrapper(application) {
+        override fun getResources(): Resources =
+            application.localizedContext(settings.languageMode).resources
+    }
+    val settings = AppSettings(application)
     val auditLogStore = AuditLogStore(appContext)
     val conversationStore = ConversationStore(appContext)
     val workspaceManager = WorkspaceManager(appContext, settings)

@@ -9,6 +9,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -115,6 +116,44 @@ class SubAgentBatchRunnerTest {
                 job.cancelAndJoin()
             }
         }
+    }
+
+    @Test
+    fun `blocking children run in parallel from a single-thread caller with an IO child context`() = runBlocking {
+        // runBlocking has one thread. A child that blocks it, like a model call, runs in
+        // parallel only when the runner moves children to a multi-thread context.
+        val limit = 3
+        val active = AtomicInteger(0)
+        val peak = AtomicInteger(0)
+        val allStarted = CountDownLatch(limit)
+        withTimeout(10_000) {
+            SubAgentBatchRunner(limit, Dispatchers.IO).run(4) { index ->
+                val now = active.incrementAndGet()
+                peak.updateAndGet { maxOf(it, now) }
+                allStarted.countDown()
+                // Blocks the thread, as OkHttp execute() does; never suspends.
+                assertTrue("first $limit children did not run together", allStarted.await(2, TimeUnit.SECONDS))
+                active.decrementAndGet()
+                index
+            }.forEachIndexed { index, outcome ->
+                assertEquals(SubAgentCallOutcome.Completed(index), outcome)
+            }
+        }
+        assertEquals(limit, peak.get())
+    }
+
+    @Test
+    fun `blocking children serialize on a single-thread caller without a child context`() = runBlocking {
+        val active = AtomicInteger(0)
+        val peak = AtomicInteger(0)
+        SubAgentBatchRunner(3).run(4) { index ->
+            val now = active.incrementAndGet()
+            peak.updateAndGet { maxOf(it, now) }
+            Thread.sleep(20)
+            active.decrementAndGet()
+            index
+        }
+        assertEquals(1, peak.get())
     }
 
     @Test

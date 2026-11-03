@@ -262,6 +262,7 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
         if (oldVersion < 13) createSubAgentTaskTable(db)
         if (oldVersion in 13 until 14) SubAgentTaskSchema.UPGRADE_13_TO_14.forEach(db::execSQL)
         if (oldVersion in 13 until 15) db.execSQL(SubAgentTaskSchema.UPGRADE_14_TO_15)
+        if (oldVersion in 13 until 16) db.execSQL(SubAgentTaskSchema.UPGRADE_15_TO_16)
     }
 
     fun createConversation(
@@ -301,6 +302,7 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
         batchId: String,
         userMessageId: Long,
         tasks: List<SubAgentTaskSeed>,
+        toolCallId: String = "",
     ) {
         val now = System.currentTimeMillis()
         val db = writableDatabase
@@ -322,6 +324,7 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
                         put("capability_hint", task.capabilityHint)
                         put("preferred_agent", task.preferredAgent)
                         put("user_message_id", userMessageId)
+                        put("tool_call_id", toolCallId)
                         put("status", SubAgentTaskStatus.PENDING)
                         put("delivered", 0)
                         put("created_at", now)
@@ -374,6 +377,7 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
             arrayOf(parentConversationId.toString()),
         ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null } ?: return null
         var userMessageId = 0L
+        var toolCallId = ""
         val tasks = db.query(
             "sub_agent_tasks",
             SUB_AGENT_TASK_COLUMNS,
@@ -385,13 +389,16 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
         ).use { cursor ->
             buildList {
                 while (cursor.moveToNext()) {
-                    if (isEmpty()) userMessageId = cursor.getLong(SUB_AGENT_TASK_USER_MESSAGE_ID)
+                    if (isEmpty()) {
+                        userMessageId = cursor.getLong(SUB_AGENT_TASK_USER_MESSAGE_ID)
+                        toolCallId = cursor.getString(SUB_AGENT_TASK_TOOL_CALL_ID).orEmpty()
+                    }
                     add(cursor.toSubAgentTaskRecord())
                 }
             }
         }
         if (tasks.isEmpty()) return null
-        return OpenSubAgentBatch(batchId, userMessageId, tasks)
+        return OpenSubAgentBatch(batchId, userMessageId, tasks, toolCallId)
     }
 
     /** The id of the conversation's newest user message, or 0 when it has none. */
@@ -1777,6 +1784,7 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
             "user_message_id",
             "batch_id",
             "preferred_agent",
+            "tool_call_id",
         )
         private const val SUB_AGENT_TASK_INDEX = 0
         private const val SUB_AGENT_TASK_TEXT = 1
@@ -1789,5 +1797,6 @@ class ConversationStore(private val appContext: Context, inMemory: Boolean = fal
         private const val SUB_AGENT_TASK_USER_MESSAGE_ID = 8
         private const val SUB_AGENT_TASK_BATCH_ID = 9
         private const val SUB_AGENT_TASK_PREFERRED_AGENT = 10
+        private const val SUB_AGENT_TASK_TOOL_CALL_ID = 11
     }
 }

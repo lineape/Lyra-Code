@@ -17,6 +17,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -62,6 +63,40 @@ class ConversationDockInstrumentedTest {
         assertEquals(root.bottom - liftPx, composerAfter.bottom, 0.5f)
         assertEquals(liftPx.toFloat(), statusBefore.top - statusAfter.top, 0.5f)
         assertEquals(liftPx.toFloat(), composerBefore.top - composerAfter.top, 0.5f)
+    }
+
+    @Test
+    fun keyboardLiftHoldsWhenAConversationStartsWithTheKeyboardOpen() {
+        // Sending the first message creates the conversation while the keyboard is open.
+        var conversation by mutableStateOf<Long?>(null)
+        var lift = false
+        compose.setContent {
+            lift = rememberKeyboardOutputLift(conversationKey = conversation, liftPx = 300, nearOutputEnd = true)
+        }
+        compose.runOnIdle { assertTrue("lift before the conversation exists", lift) }
+
+        compose.runOnIdle { conversation = 42L }
+        compose.waitForIdle()
+        compose.runOnIdle { assertTrue("lift after the conversation is created", lift) }
+    }
+
+    @Test
+    fun keyboardLiftDropsWhenTheKeyboardClosesAwayFromTheEnd() {
+        var liftPx by mutableStateOf(300)
+        var nearEnd by mutableStateOf(true)
+        var lift = false
+        compose.setContent {
+            lift = rememberKeyboardOutputLift(conversationKey = 1L, liftPx = liftPx, nearOutputEnd = nearEnd)
+        }
+        compose.runOnIdle { assertTrue(lift) }
+
+        compose.runOnIdle { nearEnd = false }
+        compose.waitForIdle()
+        compose.runOnIdle { assertTrue("an open keyboard keeps the lift", lift) }
+
+        compose.runOnIdle { liftPx = 0 }
+        compose.waitForIdle()
+        compose.runOnIdle { assertFalse("a closed keyboard away from the end drops the lift", lift) }
     }
 
     @Test
